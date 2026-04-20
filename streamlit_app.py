@@ -34,6 +34,16 @@ if 'ans_revealed' not in st.session_state:
 
 def get_new_question():
     """隨機抽取一個單字並生成選項"""
+    # 增加這段檢查
+    if df is None or df.empty:
+        st.error("⚠️ 無法讀取單字庫！請檢查 Google Sheets 共用權限或 Secrets 設定。")
+        st.stop() # 停止執行後續抽樣，避免崩潰
+
+    if len(df) < 4:
+        st.warning("⚠️ 單字庫不足 4 筆，無法產生選項。")
+        st.stop()
+
+    # 原本的抽樣邏輯
     target = df.sample(1).iloc[0]
     # 隨機抓取另外三個錯誤定義當作誘答項
     distractors = df[df['word'] != target['word']].sample(3)['definition'].tolist()
