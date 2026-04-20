@@ -2,6 +2,51 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import random
+import requests
+import json
+
+# 1. 在 Secrets 裡設定你的 GAS 網址
+# [connections.gsheets]
+# script_url = "https://script.google.com/macros/s/XXX/exec"
+SCRIPT_URL = st.secrets["connections"]["gsheets"]["script_url"]
+
+def upload_new_word(word, pos, definition, example):
+    """沿用股市 App 的方式，透過 Webhook 寫入資料"""
+    payload = {
+        "word": word,
+        "pos": pos,
+        "definition": definition,
+        "example": example
+    }
+    
+    try:
+        # 發送 POST 請求到 Google Apps Script
+        response = requests.post(SCRIPT_URL, data=json.dumps(payload))
+        
+        if response.text == "Success":
+            return True
+        else:
+            st.error(f"寫入失敗：{response.text}")
+            return False
+    except Exception as e:
+        st.error(f"連線錯誤：{e}")
+        return False
+
+# --- 在 Streamlit UI 中呼叫 ---
+with st.expander("➕ 快速新增單字 (沿用舊版 API 方式)"):
+    with st.form("quick_add", clear_on_submit=True):
+        w = st.text_input("單字")
+        p = st.selectbox("詞性", ["n.", "v.", "adj.", "adv."])
+        d = st.text_input("定義")
+        e = st.text_area("例句")
+        
+        if st.form_submit_button("送出至雲端"):
+            if w and d:
+                if upload_new_word(w, p, d, e):
+                    st.success(f"✅ {w} 已同步到 Google Sheets！")
+                    st.balloons()
+            else:
+                st.warning("請填寫完整資訊")
 
 # ==============================================================================
 # 第一部分：【頁面設定與資料連線】
