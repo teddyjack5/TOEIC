@@ -9,6 +9,13 @@ from datetime import datetime
 # ==============================================================================
 st.set_page_config(page_title="小鐵的多益單字測驗", page_icon="📖", layout="wide")
 
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    df = conn.read(ttl="1m") 
+except Exception as e:
+    st.error(f"無法連線至 Google Sheets，請檢查 Secrets 設定。")
+    df = pd.DataFrame()
+
 # 先獲取主題模式，確保 CSS 能讀到變數
 with st.sidebar:
     st.header("🎨 介面設定")
@@ -61,13 +68,6 @@ st.markdown(f"""
     }}
     </style>
 """, unsafe_allow_html=True)
-
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    df = conn.read(ttl="1m") 
-except Exception as e:
-    st.error(f"無法連線至 Google Sheets，請檢查 Secrets 設定。")
-    df = pd.DataFrame()
 
 # ==============================================================================
 # 第二部分：【核心邏輯與狀態管理】
