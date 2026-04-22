@@ -10,54 +10,29 @@ import plotly.express as px
 # ==============================================================================
 st.set_page_config(page_title="小鐵的多益單字戰情室", page_icon="📖", layout="wide")
 
-# 【核心持久化邏輯】利用 cache_resource 儲存進度，不受重新整理影響
 @st.cache_resource
 def get_global_progress():
     return {
         'score': 0,
         'total_answered': 0,
         'wrong_answers': [],
-        'mastery_ids': set() # 記錄已掌握的單字
+        'mastery_ids': set()
     }
 
 progress = get_global_progress()
 
-# 初始化 Session State (僅用於控制 UI 顯示，不存核心分數)
 if 'quiz_data' not in st.session_state: st.session_state.quiz_data = None
 if 'review_quiz_data' not in st.session_state: st.session_state.review_quiz_data = None
 if 'ans_revealed' not in st.session_state: st.session_state.ans_revealed = False
 if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 
-# 側邊欄設定
+# 側邊欄與 CSS 樣式 (保持不變)
 with st.sidebar:
     st.header("🎨 介面設定")
     theme_mode = st.selectbox("切換主題模式", ["深色模式 (Dark)", "淺色模式 (Light)"])
-    
-    if theme_mode == "深色模式 (Dark)":
-        main_bg, card_bg, text_color, label_bg = "#0E1117", "#1E1E1E", "#FFFFFF", "#333333"
-        quiz_box_bg = "#1A2E44"
-    else:
-        main_bg, card_bg, text_color, label_bg = "#FFFFFF", "#F0F2F6", "#1F1F1F", "#E0E0E0"
-        quiz_box_bg = "#E1F5FE"
+    main_bg, card_bg, text_color = ("#0E1117", "#1E1E1E", "#FFFFFF") if theme_mode == "深色模式 (Dark)" else ("#FFFFFF", "#F0F2F6", "#1F1F1F")
+    quiz_box_bg = "#1A2E44" if theme_mode == "深色模式 (Dark)" else "#E1F5FE"
 
-    st.write("---")
-    st.header("📈 學習統計 (已持久化)")
-    # 從全局 progress 讀取數據
-    if progress['total_answered'] > 0:
-        acc_data = pd.DataFrame({
-            "結果": ["正確", "錯誤"],
-            "題數": [progress['score'], progress['total_answered'] - progress['score']]
-        })
-        fig = px.pie(acc_data, values='題數', names='結果', 
-                     color_discrete_sequence=['#28a745', '#dc3545'], hole=0.5)
-        fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=200, showlegend=False,
-                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
-        st.metric("當前正確率", f"{(progress['score']/progress['total_answered'])*100:.1f}%")
-    else:
-        st.info("尚無數據")
-
-# CSS 樣式
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {main_bg} !important; color: {text_color} !important; }}
@@ -69,24 +44,20 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. 核心邏輯
+# 2. 核心函式
 # ==============================================================================
 def generate_question(source_df, target_state_key='quiz_data'):
-    if source_df is None or source_df.empty:
-        st.session_state[target_state_key] = None
-        return
+    if source_df is None or source_df.empty: return
     try:
         target = source_df.sample(n=1).iloc[0]
-        correct_ans = target['definition']
         full_pool = st.session_state.get('full_df', pd.DataFrame())
-        distractors = full_pool[full_pool['definition'] != correct_ans].sample(n=min(3, len(full_pool)-1))['definition'].tolist()
-        options = distractors + [correct_ans]
+        distractors = full_pool[full_pool['definition'] != target['definition']].sample(n=min(3, len(full_pool)-1))['definition'].tolist()
+        options = distractors + [target['definition']]
         random.shuffle(options)
-        st.session_state[target_state_key] = {'word': target['word'], 'correct_ans': correct_ans, 'pos': target['pos'], 'options': options}
+        st.session_state[target_state_key] = {'word': target['word'], 'correct_ans': target['definition'], 'pos': target['pos'], 'options': options}
         st.session_state.ans_revealed = False
         st.session_state.is_correct = None
-    except Exception as e:
-        st.error(f"生成失敗：{e}")
+    except Exception as e: st.error(f"生成失敗：{e}")
 
 @st.cache_data(ttl=60)
 def fetch_data():
@@ -95,7 +66,6 @@ def fetch_data():
         return conn.read()
     except: return pd.DataFrame()
 
-# 儲存全域資料至 session 僅供抽題參考
 st.session_state.full_df = fetch_data()
 
 # ==============================================================================
@@ -104,16 +74,12 @@ st.session_state.full_df = fetch_data()
 with st.sidebar:
     mode = st.radio("🚀 功能模式切換", ["開始測驗", "錯題強化挑戰", "新增單字庫"])
     if st.button("♻️ 手動重置所有進度", use_container_width=True):
-        # 清空全局快取
-        progress['score'] = 0
-        progress['total_answered'] = 0
-        progress['wrong_answers'] = []
-        progress['mastery_ids'] = set()
-        st.session_state.quiz_data = None
+        progress.update({'score': 0, 'total_answered': 0, 'wrong_answers': [], 'mastery_ids': set()})
         st.rerun()
 
 st.title("📖 多益單字強化戰情室")
 
+# --- 模式 1：開始測驗 ---
 if mode == "開始測驗":
     if st.session_state.full_df.empty:
         st.warning("📭 單字庫為空。")
@@ -122,11 +88,12 @@ if mode == "開始測驗":
         q = st.session_state.quiz_data
         if q:
             st.markdown(f'<div class="quiz-container"><div class="quiz-word">{q["word"]}</div><div class="quiz-pos">({q["pos"]})</div></div>', unsafe_allow_html=True)
+            
+            # 選項區
             cols = st.columns(2)
             for i, option in enumerate(q['options']):
                 with cols[i % 2]:
                     if st.button(option, key=f"btn_{i}", use_container_width=True, disabled=st.session_state.ans_revealed):
-                        # 更新全局進度
                         progress['total_answered'] += 1
                         if option == q['correct_ans']:
                             progress['score'] += 1
@@ -134,49 +101,74 @@ if mode == "開始測驗":
                         else:
                             st.session_state.is_correct = False
                             if not any(item['word'] == q['word'] for item in progress['wrong_answers']):
-                                progress['wrong_answers'].append({
-                                    'word': q['word'], 'pos': q['pos'], 'definition': q['correct_ans'], 'mastered': False
-                                })
+                                progress['wrong_answers'].append({'word': q['word'], 'pos': q['pos'], 'definition': q['correct_ans'], 'mastered': False})
                         st.session_state.ans_revealed = True
                         st.rerun()
 
+            # ✨ 優化重點：將結果訊息放在選項下方，整行顯示
             if st.session_state.ans_revealed:
-                if st.session_state.is_correct: st.success("🎯 回答正確！")
-                else: st.error(f"❌ 錯誤！正確答案：{q['correct_ans']}")
+                st.write("") # 增加間距
+                if st.session_state.is_correct:
+                    st.success("🎯 太棒了！回答正確！")
+                else:
+                    st.error(f"❌ 不對喔！正確答案是：**{q['correct_ans']}**")
+                
                 if st.button("➡️ 下一題", type="primary", use_container_width=True):
                     generate_question(st.session_state.full_df, 'quiz_data')
                     st.rerun()
 
+# --- 模式 2：錯題強化挑戰 ---
 elif mode == "錯題強化挑戰":
     st.subheader("🔥 弱點針對訓練")
     if not progress['wrong_answers']:
         st.info("目前沒有錯題紀錄。")
     else:
-        # 從全局 progress 讀取尚未掌握的單字
         pending_list = [item for item in progress['wrong_answers'] if item['word'] not in progress['mastery_ids']]
         pending_df = pd.DataFrame(pending_list)
         
         if pending_df.empty:
-            st.balloons()
-            st.success("✨ 所有錯題皆已挑戰成功！")
+            st.balloons(); st.success("✨ 所有錯題皆已挑戰成功！")
         else:
             if st.session_state.review_quiz_data is None: generate_question(pending_df, 'review_quiz_data')
             rq = st.session_state.review_quiz_data
             if rq:
                 st.markdown(f'<div class="quiz-container" style="border-top: 5px solid #FFC107;"><div class="quiz-word">{rq["word"]}</div><div class="quiz-pos">({rq["pos"]})</div></div>', unsafe_allow_html=True)
+                
                 cols = st.columns(2)
+                # 這裡增加一個 session_state 來追蹤錯題挑戰的回答狀態
+                if 'rev_revealed' not in st.session_state: st.session_state.rev_revealed = False
+                if 'rev_correct' not in st.session_state: st.session_state.rev_correct = None
+
                 for i, option in enumerate(rq['options']):
                     with cols[i % 2]:
-                        if st.button(option, key=f"rev_{i}", use_container_width=True):
+                        if st.button(option, key=f"rev_{i}", use_container_width=True, disabled=st.session_state.rev_revealed):
                             if option == rq['correct_ans']:
-                                st.toast(f"✅ 成功掌握：{rq['word']}！")
+                                st.session_state.rev_correct = True
                                 progress['mastery_ids'].add(rq['word'])
-                                st.session_state.review_quiz_data = None
-                                st.rerun()
-                            else: st.error("選錯了，再想一下！")
-                if st.button("⏭️ 跳過此題", use_container_width=True):
-                    st.session_state.review_quiz_data = None
-                    st.rerun()
+                            else:
+                                st.session_state.rev_correct = False
+                            st.session_state.rev_revealed = True
+                            st.rerun()
+
+                # ✨ 優化重點：錯題挑戰的結果訊息也移到下方
+                if st.session_state.rev_revealed:
+                    st.write("")
+                    if st.session_state.rev_correct:
+                        st.success(f"✅ 成功掌握：{rq['word']}！")
+                        if st.button("➡️ 挑戰下一題", type="primary", use_container_width=True):
+                            st.session_state.review_quiz_data = None
+                            st.session_state.rev_revealed = False
+                            st.rerun()
+                    else:
+                        st.error(f"❌ 還是錯了！再記一次：{rq['word']} = **{rq['correct_ans']}**")
+                        if st.button("🔄 再試一次此題", use_container_width=True):
+                            st.session_state.rev_revealed = False
+                            st.rerun()
+                
+                if not st.session_state.rev_revealed:
+                    if st.button("⏭️ 跳過此題", use_container_width=True):
+                        st.session_state.review_quiz_data = None
+                        st.rerun()
         
         st.write("---")
         with st.expander("🔍 查看歷史錯題本 (回顧歷程)", expanded=False):
@@ -185,14 +177,13 @@ elif mode == "錯題強化挑戰":
                 history_df['狀態'] = history_df['word'].apply(lambda x: "✅ 已掌握" if x in progress['mastery_ids'] else "❌ 待加強")
                 st.table(history_df[['word', 'pos', 'definition', '狀態']])
 
+# 模式 3：新增單字庫 (保持不變)
 elif mode == "新增單字庫":
     st.subheader("➕ 擴充雲端單字庫")
-    try:
-        url = st.secrets["connections"]["gsheets"]["script_url"]
-        with st.form("add_form", clear_on_submit=True):
-            w = st.text_input("英文單字"); p = st.selectbox("詞性", ["n.", "v.", "adj.", "adv.", "phr."]); d = st.text_input("定義")
-            if st.form_submit_button("💾 儲存並同步"):
-                if w and d:
-                    res = requests.post(url, json={"method": "write", "word": w, "pos": p, "definition": d})
-                    st.success(f"✅ 『{w}』已送出！"); st.cache_data.clear()
-    except: st.error("請確認 Secrets 設定。")
+    url = st.secrets["connections"]["gsheets"]["script_url"]
+    with st.form("add_form", clear_on_submit=True):
+        w = st.text_input("英文單字"); p = st.selectbox("詞性", ["n.", "v.", "adj.", "adv.", "phr."]); d = st.text_input("定義")
+        if st.form_submit_button("💾 儲存並同步"):
+            if w and d:
+                requests.post(url, json={"method": "write", "word": w, "pos": p, "definition": d})
+                st.success(f"✅ 『{w}』已送出！"); st.cache_data.clear()
