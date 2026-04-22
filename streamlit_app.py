@@ -10,13 +10,11 @@ from datetime import datetime
 # ==============================================================================
 st.set_page_config(page_title="小鐵的多益單字測驗", page_icon="📖", layout="wide")
 
-# 優先獲取主題模式
 with st.sidebar:
     st.header("🎨 介面設定")
     theme_mode = st.selectbox("切換主題模式", ["深色模式 (Dark)", "淺色模式 (Light)"])
     st.write("---")
 
-# 設定動態顏色
 if theme_mode == "深色模式 (Dark)":
     main_bg, card_bg, text_color, sub_text, label_bg, card_shadow = "#0E1117", "#1E1E1E", "#FFFFFF", "#888888", "#333333", "rgba(0,0,0,0.5)"
 else:
@@ -34,46 +32,17 @@ st.markdown(f"""
 st.title("📖 多益 (TOEIC) 單字強化戰情室")
 
 # ==============================================================================
-# 第二部分：【資料連線與安全檢查】
+# 第二部分：【核心函式定義】 (移動到最前面，確保後續可正確呼叫)
 # ==============================================================================
-# 確保 df 永遠存在
-df = pd.DataFrame()
-
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    df = conn.read(ttl="1m")
-except Exception as e:
-    st.error("Google Sheets 連線失敗")
-    df = pd.DataFrame() # 確保出錯時 df 是一個空的 DataFrame 而不是 None
-
-# 在呼叫時，確保傳入 df
-if st.session_state.get('quiz_data') is None and not df.empty:
-    generate_question(df)
-
-# ==============================================================================
-# 第三部分：【核心邏輯】
-# ==============================================================================
-if 'quiz_data' not in st.session_state: st.session_state.quiz_data = None
-if 'score' not in st.session_state: st.session_state.score = 0
-if 'total_answered' not in st.session_state: st.session_state.total_answered = 0
-if 'ans_revealed' not in st.session_state: st.session_state.ans_revealed = False
-if 'is_correct' not in st.session_state: st.session_state.is_correct = None
-if 'wrong_answers' not in st.session_state: st.session_state.wrong_answers = []
-
 def generate_question(data_df):
-    # 第一道防線：檢查 data_df 是否為 None 或不是 DataFrame
-    if data_df is None or not isinstance(data_df, pd.DataFrame):
-        return
-    
-    # 第二道防線：檢查是否為空
-    if data_df.empty:
+    # 第一道防線：檢查 data_df 是否為 None 或 DataFrame
+    if data_df is None or not isinstance(data_df, pd.DataFrame) or data_df.empty:
         return
 
     try:
         target = data_df.sample(n=1).iloc[0]
         correct_ans = target['definition']
         
-        # 確保資料量足夠生成干擾項
         if len(data_df) >= 4:
             distractors = data_df[data_df['definition'] != correct_ans].sample(n=3)['definition'].tolist()
         else:
@@ -91,11 +60,30 @@ def generate_question(data_df):
         st.session_state.ans_revealed = False
         st.session_state.is_correct = None
     except Exception as e:
-        st.error(f"題目生成時發生邏輯錯誤: {e}")
+        st.error(f"題目生成錯誤: {e}")
 
-# 初始生成題目
+# ==============================================================================
+# 第三部分：【資料連線與初始化】
+# ==============================================================================
+if 'quiz_data' not in st.session_state: st.session_state.quiz_data = None
+if 'score' not in st.session_state: st.session_state.score = 0
+if 'total_answered' not in st.session_state: st.session_state.total_answered = 0
+if 'ans_revealed' not in st.session_state: st.session_state.ans_revealed = False
+if 'is_correct' not in st.session_state: st.session_state.is_correct = None
+if 'wrong_answers' not in st.session_state: st.session_state.wrong_answers = []
+
+df = pd.DataFrame()
+
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    df = conn.read(ttl="1m")
+except Exception as e:
+    st.error("Google Sheets 連線失敗")
+    df = pd.DataFrame()
+
+# 初始生成題目：【關鍵修正：傳入 df】
 if st.session_state.quiz_data is None and not df.empty:
-    generate_question()
+    generate_question(df)
 
 # ==============================================================================
 # 第四部分：【UI 畫面】
@@ -113,14 +101,14 @@ with st.sidebar:
 
 if mode == "開始測驗":
     if df.empty:
-        st.warning("📭 請先到『新增單字庫』模式加入單字。")
+        st.warning("📭 單字庫為空，請先切換到『新增單字庫』模式。")
     elif st.session_state.quiz_data:
         q = st.session_state.quiz_data
         st.markdown(f"""
-            <div style="background-color: {card_bg}; padding: 35px; border-radius: 20px; border: 1px solid #444; border-left: 10px solid #FF4B4B; margin-bottom: 25px; box-shadow: 0 10px 20px {card_shadow}; text-align: center;">
-                <p style="color: {sub_text}; margin-bottom: 10px; font-size: 1.1em; letter-spacing: 2px;">VOCABULARY QUIZ</p>
-                <h2 style="color: {text_color} !important; margin: 15px 0; font-size: 2.2em;">請選出「 <span style="color: #FF4B4B; font-weight: 900;">{q['word']}</span> 」的正確定義</h2>
-                <div style="margin-top: 20px;"><span style="background-color: {label_bg}; padding: 6px 18px; border-radius: 25px; font-size: 0.9em; color: #FF4B4B; border: 1px solid #444; font-weight: bold;">PART OF SPEECH: {q['pos']}</span></div>
+            <div style="background-color: {card_bg}; padding: 35px; border-radius: 20px; border: 1px solid #444; border-left: 10px solid #FF4B4B; margin-bottom: 25px; text-align: center;">
+                <p style="color: {sub_text}; font-size: 1.1em;">VOCABULARY QUIZ</p>
+                <h2 style="color: {text_color} !important;">請選出「 <span style="color: #FF4B4B; font-weight: 900;">{q['word']}</span> 」的正確定義</h2>
+                <div style="margin-top: 20px;"><span style="background-color: {label_bg}; padding: 6px 18px; border-radius: 25px; color: #FF4B4B; font-weight: bold;">{q['pos']}</span></div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -141,10 +129,11 @@ if mode == "開始測驗":
 
         if st.session_state.ans_revealed:
             st.write("---")
-            if st.session_state.is_correct: st.success(f"🎊 **回答正確！**")
-            else: st.error(f"⚠️ **回答錯誤！** 正確答案：**{q['correct_ans']}**")
+            if st.session_state.is_correct: st.success(f"🎊 回答正確！")
+            else: st.error(f"⚠️ 正確答案：**{q['correct_ans']}**")
+            # 【關鍵修正：點擊下一題時也要傳入 df】
             if st.button("➡️ 下一題", type="primary", use_container_width=True):
-                generate_question()
+                generate_question(df)
                 st.rerun()
 
 elif mode == "新增單字庫":
@@ -157,7 +146,7 @@ elif mode == "新增單字庫":
                 res = requests.post(SCRIPT_URL, json={"method": "write", "word": w, "pos": p, "definition": d})
                 if res.status_code == 200:
                     st.success("成功！"); st.cache_data.clear()
-            else: st.warning("請填寫內容。")
+            else: st.warning("請填寫完整。")
 
 elif mode == "錯題複習":
     st.subheader("🔍 我的錯題本")
