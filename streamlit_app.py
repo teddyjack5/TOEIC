@@ -62,6 +62,13 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
+File "/mount/src/toeic/streamlit_app.py", line 86, in <module>
+    if st.session_state.quiz_data is None: generate_question()
+                                           ^^^^^^^^^^^^^^^^^^^
+File "/mount/src/toeic/streamlit_app.py", line 76, in generate_question
+    if df.empty: return
+       ^^
+
 # ==============================================================================
 # 第二部分：【核心邏輯與狀態管理】
 # ==============================================================================
