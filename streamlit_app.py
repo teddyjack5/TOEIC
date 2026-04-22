@@ -118,21 +118,37 @@ if mode == "開始測驗":
 
 elif mode == "新增單字庫":
     st.subheader("➕ 擴充你的單字資料庫")
+
+    SCRIPT_URL = st.secrets["connections"]["gsheets"]["script_url"]
+    
     with st.form("add_word_form", clear_on_submit=True):
         new_word = st.text_input("英文單字 (Word)")
         new_pos = st.selectbox("詞性 (POS)", ["n.", "v.", "adj.", "adv.", "prep.", "conj.", "phr."])
         new_def = st.text_input("中文定義 (Definition)")
+        
         submit = st.form_submit_button("💾 儲存至雲端資料庫")
+        
         if submit:
             if new_word and new_def:
                 try:
-                    new_row = pd.DataFrame([{"word": new_word, "pos": new_pos, "definition": new_def}])
-                    updated_df = pd.concat([df, new_row], ignore_index=True)
-                    conn.update(worksheet="Sheet1", data=updated_df)
-                    st.success(f"🎉 成功加入單字：{new_word}！")
-                    st.cache_data.clear()
+                    payload = {
+                        "method": "write", 
+                        "word": new_word,
+                        "pos": new_pos,
+                        "definition": new_def
+                    }
+                    
+                    import requests
+                    with st.spinner("正在同步至 Google Sheets..."):
+                        response = requests.post(SCRIPT_URL, json=payload, timeout=10)
+                    
+                    if response.status_code == 200:
+                        st.success(f"🎉 成功加入單字：{new_word}！")
+                        st.cache_data.clear()
+                    else:
+                        st.error(f"寫入失敗，Apps Script 回傳錯誤代碼: {response.status_code}")
                 except Exception as e:
-                    st.error(f"儲存失敗: {e}")
+                    st.error(f"連線至 Apps Script 發生錯誤: {e}")
             else:
                 st.warning("請填寫單字與定義。")
 
