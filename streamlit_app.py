@@ -19,7 +19,7 @@ state_defaults = {
     'total_answered': 0,
     'ans_revealed': False,
     'is_correct': None,
-    'wrong_answers': [], # 這裡存字典，包含 {'word', 'pos', 'definition', 'mastered'}
+    'wrong_answers': [], 
     'review_quiz_data': None
 }
 for key, value in state_defaults.items():
@@ -34,7 +34,7 @@ with st.sidebar:
     if theme_mode == "深色模式 (Dark)":
         main_bg, card_bg, text_color, label_bg = "#0E1117", "#1E1E1E", "#FFFFFF", "#333333"
     else:
-        main_bg, card_bg, text_color, label_bg = "#FFFFFF", "#F0F2F6", "#1F1F1F", "#E0E0E0"
+        main_bg, card_bg, text_color, label_bg = "#FFFFFF", "#F0F2F6", "#1F1F1F", "#555555"
 
     st.write("---")
     st.header("📈 學習統計")
@@ -51,10 +51,12 @@ with st.sidebar:
     else:
         st.info("尚無數據")
 
+# CSS 注入
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {main_bg} !important; color: {text_color} !important; }}
     .stButton>button {{ border-radius: 12px; height: 3.5em; border: 1px solid #444; background-color: {card_bg} !important; color: {text_color} !important; font-weight: bold; }}
+    .stExpander {{ border-radius: 12px; border: 1px solid #444; background-color: {card_bg}; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -141,7 +143,7 @@ elif mode == "錯題強化挑戰":
         
         if pending_df.empty:
             st.balloons()
-            st.success("✨ 所有錯題皆已挑戰成功！你也可以在下方列表回顧。")
+            st.success("✨ 所有錯題皆已挑戰成功！")
         else:
             if st.session_state.review_quiz_data is None: generate_question(pending_df, 'review_quiz_data')
             rq = st.session_state.review_quiz_data
@@ -153,7 +155,6 @@ elif mode == "錯題強化挑戰":
                         if st.button(option, key=f"rev_{i}", use_container_width=True):
                             if option == rq['correct_ans']:
                                 st.toast(f"✅ 成功掌握：{rq['word']}！")
-                                # 修正狀態：將該單字標記為 mastered
                                 for item in st.session_state.wrong_answers:
                                     if item['word'] == rq['word']: item['mastered'] = True
                                 st.session_state.review_quiz_data = None
@@ -163,21 +164,22 @@ elif mode == "錯題強化挑戰":
                     st.session_state.review_quiz_data = None
                     st.rerun()
         
-        # --- 永遠顯示的歷史紀錄區 ---
+        # --- 核心改進：使用 st.expander 收折歷史紀錄 ---
         st.write("---")
-        st.subheader("🔍 歷史錯題本 (回顧)")
-        history_df = pd.DataFrame(st.session_state.wrong_answers)
-        if not history_df.empty:
-            # 將 True/False 轉為更直觀的圖示
-            history_df['狀態'] = history_df['mastered'].apply(lambda x: "✅ 已掌握" if x else "❌ 待加強")
-            st.table(history_df[['word', 'pos', 'definition', '狀態']])
+        with st.expander("🔍 查看歷史錯題本 (回顧歷程)", expanded=False):
+            history_df = pd.DataFrame(st.session_state.wrong_answers)
+            if not history_df.empty:
+                history_df['狀態'] = history_df['mastered'].apply(lambda x: "✅ 已掌握" if x else "❌ 待加強")
+                st.table(history_df[['word', 'pos', 'definition', '狀態']])
+            else:
+                st.write("目前尚無歷史紀錄。")
 
 elif mode == "新增單字庫":
     st.subheader("➕ 擴充雲端單字庫")
     try:
         url = st.secrets["connections"]["gsheets"]["script_url"]
         with st.form("add_form", clear_on_submit=True):
-            w = st.text_input("英文單字"); p = st.selectbox("詞性", ["n.", "v.", "adj.", "adv.", "phr."]); d = st.text_input("中文定義")
+            w = st.text_input("英文單字"); p = st.selectbox("詞性", ["n.", "v.", "adj.", "adv.", "phr."]); d = st.text_input("定義")
             if st.form_submit_button("💾 儲存並同步"):
                 if w and d:
                     res = requests.post(url, json={"method": "write", "word": w, "pos": p, "definition": d})
