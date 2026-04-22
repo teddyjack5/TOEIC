@@ -6,79 +6,57 @@ import requests
 from datetime import datetime
 
 # ==============================================================================
-# 第一部分：【頁面設定與動態主題】
+# 第一部分：【資料連線與全域初始化】
 # ==============================================================================
-st.set_page_config(page_title="小鐵的多益單字測驗", page_icon="📖", layout="wide")
+# 重要：先給 df 一個預設值，防止後續 generate_question 找不到變數
+df = pd.DataFrame() 
 
-# 初始化 df 為空資料表，防止後續 generate_question 崩潰
-df = pd.DataFrame()
-
-# 優先獲取主題模式，確保後續 CSS 可以正確讀取變數
-with st.sidebar:
-    st.header("🎨 介面設定")
-    theme_mode = st.selectbox("切換主題模式", ["深色模式 (Dark)", "淺色模式 (Light)"])
-    st.write("---")
-
-# 設定動態顏色變數
-if theme_mode == "深色模式 (Dark)":
-    main_bg = "#0E1117"     # 全域背景
-    card_bg = "#1E1E1E"     # 卡片背景
-    text_color = "#FFFFFF"  # 主文字
-    sub_text = "#888888"    # 副標題
-    label_bg = "#333333"    # 標籤背景
-    card_shadow = "rgba(0,0,0,0.5)"
-else:
-    main_bg = "#FFFFFF"     # 全域背景
-    card_bg = "#F0F2F6"     # 卡片背景
-    text_color = "#1F1F1F"  # 主文字
-    sub_text = "#555555"    # 副標題
-    label_bg = "#E0E0E0"    # 標籤背景
-    card_shadow = "rgba(0,0,0,0.1)"
-
-# 強制渲染 CSS：使用 !important 奪回 Edge 瀏覽器的顏色主導權
-st.markdown(f"""
-    <style>
-    .stApp {{
-        background-color: {main_bg} !important;
-        color: {text_color} !important;
-    }}
-    
-    [data-testid="stSidebar"] {{
-        background-color: {main_bg} !important;
-    }}
-
-    /* 強制修改所有 Streamlit 原生文字顏色 */
-    .stMarkdown p, .stHeader h1, .stMetric label {{
-        color: {text_color} !important;
-    }}
-
-    .stButton>button {{
-        border-radius: 10px;
-        font-weight: bold;
-        height: 3.5em;
-        border: 1px solid #444;
-        background-color: {card_bg} !important;
-        color: {text_color} !important;
-    }}
-    
-    .stButton>button:hover {{
-        border-color: #FF4B4B !important;
-        color: #FF4B4B !important;
-    }}
-    </style>
-""", unsafe_allow_html=True)
-
-st.title("📖 多益 (TOEIC) 單字強化戰情室")
-
-# ==============================================================================
-# 第二部分：【資料連線】
-# ==============================================================================
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     df = conn.read(ttl="1m") 
 except Exception as e:
     st.error(f"⚠️ 無法連線至 Google Sheets，請檢查 Secrets 設定。")
+    # 這裡確保即使出錯，df 也是一個空的 DataFrame 而不是 None
+    df = pd.DataFrame() 
 
+# ==============================================================================
+# 第二部分：【函式定義】
+# ==============================================================================
+def generate_question():
+    # 使用 global 關鍵字強制函式去抓取外面的 df 變數
+    global df 
+    
+    # 增加檢查：如果 df 不存在或是空的就跳出
+    if df is None or df.empty:
+        return
+    
+    try:
+        target = df.sample(n=1).iloc[0]
+        correct_ans = target['definition']
+        
+        # 確保資料量足夠生成干擾項
+        if len(df) >= 4:
+            distractors = df[df['definition'] != correct_ans].sample(n=3)['definition'].tolist()
+        else:
+            distractors = ["選項A", "選項B", "選項C"]
+            
+        options = distractors + [correct_ans]
+        random.shuffle(options)
+        
+        st.session_state.quiz_data = {
+            'word': target['word'], 
+            'correct_ans': correct_ans, 
+            'pos': target['pos'], 
+            'options': options
+        }
+        st.session_state.ans_revealed = False
+        st.session_state.is_correct = None
+    except Exception as e:
+        st.error(f"生成題目時發生錯誤: {e}")
+
+# 在主流程中，確保只有在 df 有資料時才觸發生成
+if st.session_state.quiz_data is None and not df.empty:
+    generate_question()
 # ==============================================================================
 # 第三部分：【核心邏輯與狀態管理】
 # ==============================================================================
