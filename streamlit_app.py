@@ -22,7 +22,7 @@ st.title("📖 多益 (TOEIC) 單字強化戰情室")
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-    df = conn.read(ttl="0") 
+    df = conn.read(ttl="1m") 
 except Exception as e:
     st.error("無法連線至 Google Sheets。")
     st.stop()
