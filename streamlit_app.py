@@ -43,7 +43,12 @@ try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     df = conn.read(ttl="1m")
 except Exception as e:
-    st.error(f"⚠️ 無法讀取資料，請檢查 Google Sheets 或 Secrets 設定。")
+    st.error("Google Sheets 連線失敗")
+    df = pd.DataFrame() # 確保出錯時 df 是一個空的 DataFrame 而不是 None
+
+# 在呼叫時，確保傳入 df
+if st.session_state.get('quiz_data') is None and not df.empty:
+    generate_question(df)
 
 # ==============================================================================
 # 第三部分：【核心邏輯】
@@ -55,20 +60,22 @@ if 'ans_revealed' not in st.session_state: st.session_state.ans_revealed = False
 if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 if 'wrong_answers' not in st.session_state: st.session_state.wrong_answers = []
 
-# 【只保留這一個正確版本的函式】
-def generate_question():
-    global df
-    # 增加多重防呆檢查
-    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+def generate_question(data_df):
+    # 第一道防線：檢查 data_df 是否為 None 或不是 DataFrame
+    if data_df is None or not isinstance(data_df, pd.DataFrame):
         return
     
+    # 第二道防線：檢查是否為空
+    if data_df.empty:
+        return
+
     try:
-        target = df.sample(n=1).iloc[0]
+        target = data_df.sample(n=1).iloc[0]
         correct_ans = target['definition']
         
-        # 確保干擾項邏輯
-        if len(df) >= 4:
-            distractors = df[df['definition'] != correct_ans].sample(n=3)['definition'].tolist()
+        # 確保資料量足夠生成干擾項
+        if len(data_df) >= 4:
+            distractors = data_df[data_df['definition'] != correct_ans].sample(n=3)['definition'].tolist()
         else:
             distractors = ["選項A", "選項B", "選項C"]
             
@@ -84,7 +91,7 @@ def generate_question():
         st.session_state.ans_revealed = False
         st.session_state.is_correct = None
     except Exception as e:
-        st.error(f"題目生成失敗: {e}")
+        st.error(f"題目生成時發生邏輯錯誤: {e}")
 
 # 初始生成題目
 if st.session_state.quiz_data is None and not df.empty:
