@@ -26,12 +26,34 @@ if 'review_quiz_data' not in st.session_state: st.session_state.review_quiz_data
 if 'ans_revealed' not in st.session_state: st.session_state.ans_revealed = False
 if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 
-# 側邊欄與 CSS 樣式 (保持不變)
+# 側邊欄設定
 with st.sidebar:
     st.header("🎨 介面設定")
     theme_mode = st.selectbox("切換主題模式", ["深色模式 (Dark)", "淺色模式 (Light)"])
-    main_bg, card_bg, text_color = ("#0E1117", "#1E1E1E", "#FFFFFF") if theme_mode == "深色模式 (Dark)" else ("#FFFFFF", "#F0F2F6", "#1F1F1F")
-    quiz_box_bg = "#1A2E44" if theme_mode == "深色模式 (Dark)" else "#E1F5FE"
+    
+    if theme_mode == "深色模式 (Dark)":
+        main_bg, card_bg, text_color = "#0E1117", "#1E1E1E", "#FFFFFF"
+        quiz_box_bg = "#1A2E44"
+    else:
+        main_bg, card_bg, text_color = "#FFFFFF", "#F0F2F6", "#1F1F1F"
+        quiz_box_bg = "#E1F5FE"
+
+    st.write("---")
+    # ✨ 【找回圓餅圖】 讀取全局 progress 數據
+    st.header("📈 學習統計")
+    if progress['total_answered'] > 0:
+        acc_data = pd.DataFrame({
+            "結果": ["正確", "錯誤"],
+            "題數": [progress['score'], progress['total_answered'] - progress['score']]
+        })
+        fig = px.pie(acc_data, values='題數', names='結果', 
+                     color_discrete_sequence=['#28a745', '#dc3545'], hole=0.5)
+        fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=200, showlegend=False,
+                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
+        st.metric("當前正確率", f"{(progress['score']/progress['total_answered'])*100:.1f}%")
+    else:
+        st.info("尚無數據，開始練習吧！")
 
 st.markdown(f"""
     <style>
@@ -89,7 +111,6 @@ if mode == "開始測驗":
         if q:
             st.markdown(f'<div class="quiz-container"><div class="quiz-word">{q["word"]}</div><div class="quiz-pos">({q["pos"]})</div></div>', unsafe_allow_html=True)
             
-            # 選項區
             cols = st.columns(2)
             for i, option in enumerate(q['options']):
                 with cols[i % 2]:
@@ -105,9 +126,8 @@ if mode == "開始測驗":
                         st.session_state.ans_revealed = True
                         st.rerun()
 
-            # ✨ 優化重點：將結果訊息放在選項下方，整行顯示
             if st.session_state.ans_revealed:
-                st.write("") # 增加間距
+                st.write("") 
                 if st.session_state.is_correct:
                     st.success("🎯 太棒了！回答正確！")
                 else:
@@ -135,7 +155,6 @@ elif mode == "錯題強化挑戰":
                 st.markdown(f'<div class="quiz-container" style="border-top: 5px solid #FFC107;"><div class="quiz-word">{rq["word"]}</div><div class="quiz-pos">({rq["pos"]})</div></div>', unsafe_allow_html=True)
                 
                 cols = st.columns(2)
-                # 這裡增加一個 session_state 來追蹤錯題挑戰的回答狀態
                 if 'rev_revealed' not in st.session_state: st.session_state.rev_revealed = False
                 if 'rev_correct' not in st.session_state: st.session_state.rev_correct = None
 
@@ -150,7 +169,6 @@ elif mode == "錯題強化挑戰":
                             st.session_state.rev_revealed = True
                             st.rerun()
 
-                # ✨ 優化重點：錯題挑戰的結果訊息也移到下方
                 if st.session_state.rev_revealed:
                     st.write("")
                     if st.session_state.rev_correct:
