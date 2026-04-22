@@ -76,12 +76,26 @@ with st.sidebar:
 if mode == "開始測驗":
     q = st.session_state.quiz_data
     
-    # 測驗卡片樣式
+    # 優化後的測驗卡片樣式 (強制指定字體顏色)
     st.markdown(f"""
-        <div style="background-color:#ffffff; padding:20px; border-radius:15px; border-left: 8px solid #FF4B4B; margin-bottom:20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <p style="color:#888; margin:0;">Vocabulary Quiz</p>
-            <h2 style="margin:0;">請選出「 <b>{q['word']}</b> 」的正確定義</h2>
-            <span style="background-color:#f0f2f6; padding:2px 8px; border-radius:5px; font-size:0.8em; color:#555;">詞性：{q['pos']}</span>
+        <div style="
+            background-color: #ffffff; 
+            padding: 30px; 
+            border-radius: 15px; 
+            border-left: 10px solid #FF4B4B; 
+            margin-bottom: 25px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            text-align: center;
+        ">
+            <p style="color: #666666; margin-bottom: 10px; font-size: 1.1em; font-weight: 500;">Vocabulary Quiz</p>
+            <h2 style="color: #1f1f1f; margin: 10px 0; font-size: 2em; line-height: 1.4;">
+                請選出「 <span style="color: #FF4B4B; font-weight: 800;">{q['word']}</span> 」的正確定義
+            </h2>
+            <div style="margin-top: 15px;">
+                <span style="background-color: #f0f2f6; padding: 5px 15px; border-radius: 20px; font-size: 0.9em; color: #333; border: 1px solid #ddd;">
+                    詞性：{q['pos']}
+                </span>
+            </div>
         </div>
     """, unsafe_allow_html=True)
 
