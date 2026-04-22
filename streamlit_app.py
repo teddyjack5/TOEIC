@@ -67,20 +67,43 @@ with st.sidebar:
 # ==============================================================================
 # 第四部分：【主畫面 UI】
 # ==============================================================================
+if theme_mode == "深色模式 (Dark)":
+    bg_color = "#1E1E1E"
+    text_color = "#FFFFFF"
+    sub_text = "#888888"
+    card_shadow = "rgba(0,0,0,0.5)"
+    label_bg = "#333333"
+else:
+    bg_color = "#F0F2F6"
+    text_color = "#1F1F1F"
+    sub_text = "#555555"
+    card_shadow = "rgba(0,0,0,0.1)"
+    label_bg = "#E0E0E0"
+
+# 更新主卡片 UI
 if mode == "開始測驗":
     q = st.session_state.quiz_data
     
-    # 題目卡片
     st.markdown(f"""
-        <div style="background-color: #1E1E1E; padding: 40px; border-radius: 20px; border: 1px solid #333;
-            border-left: 10px solid #FF4B4B; margin-bottom: 30px; text-align: center;">
-            <p style="color: #888888; font-size: 1.1em; letter-spacing: 2px;">VOCABULARY QUIZ</p>
-            <h2 style="color: #FFFFFF; margin: 15px 0; font-size: 2.2em;">
-                請選出「 <span style="color: #FF4B4B; font-weight: 900; text-shadow: 0px 0px 15px rgba(255,75,75,0.4);">{q['word']}</span> 」的正確定義
+        <div style="
+            background-color: {bg_color}; 
+            padding: 35px; 
+            border-radius: 20px; 
+            border: 1px solid #444;
+            border-left: 10px solid #FF4B4B; 
+            margin-bottom: 25px; 
+            box-shadow: 0 10px 20px {card_shadow};
+            text-align: center;
+        ">
+            <p style="color: {sub_text}; margin-bottom: 10px; font-size: 1.1em; letter-spacing: 2px;">VOCABULARY QUIZ</p>
+            <h2 style="color: {text_color}; margin: 15px 0; font-size: 2.2em;">
+                請選出「 <span style="color: #FF4B4B; font-weight: 900; text-shadow: 0px 0px 10px rgba(255,75,75,0.3);">{q['word']}</span> 」的正確定義
             </h2>
-            <span style="background-color: #333333; padding: 6px 20px; border-radius: 25px; font-size: 0.9em; color: #FF4B4B; font-weight: bold;">
-                PART OF SPEECH: {q['pos']}
-            </span>
+            <div style="margin-top: 20px;">
+                <span style="background-color: {label_bg}; padding: 6px 18px; border-radius: 25px; font-size: 0.9em; color: #FF4B4B; border: 1px solid #444; font-weight: bold;">
+                    PART OF SPEECH: {q['pos']}
+                </span>
+            </div>
         </div>
     """, unsafe_allow_html=True)
 
