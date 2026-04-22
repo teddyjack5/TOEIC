@@ -64,6 +64,11 @@ with st.sidebar:
         st.session_state.update({"score": 0, "total_answered": 0, "wrong_answers": [], "quiz_data": None})
         st.rerun()
 
+with st.sidebar:
+    st.header("🎨 介面設定")
+    # 讓使用者手動選擇主題
+    theme_mode = st.selectbox("切換主題模式", ["深色模式 (Dark)", "淺色模式 (Light)"])
+    st.write("---")
 # ==============================================================================
 # 第四部分：【主畫面 UI】
 # ==============================================================================
