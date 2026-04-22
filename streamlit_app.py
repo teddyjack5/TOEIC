@@ -9,23 +9,58 @@ from datetime import datetime
 # ==============================================================================
 st.set_page_config(page_title="小鐵的多益單字測驗", page_icon="📖", layout="wide")
 
-# 自定義 CSS
-st.markdown("""
+# 先獲取主題模式，確保 CSS 能讀到變數
+with st.sidebar:
+    st.header("🎨 介面設定")
+    theme_mode = st.selectbox("切換主題模式", ["深色模式 (Dark)", "淺色模式 (Light)"])
+    st.write("---")
+
+# 設定動態顏色變數
+if theme_mode == "深色模式 (Dark)":
+    main_bg = "#0E1117"     # 全域背景
+    card_bg = "#1E1E1E"     # 卡片背景
+    text_color = "#FFFFFF"  # 主文字
+    sub_text = "#888888"    # 副標題
+    label_bg = "#333333"    # 標籤背景
+    card_shadow = "rgba(0,0,0,0.5)"
+else:
+    main_bg = "#FFFFFF"     # 全域背景
+    card_bg = "#F0F2F6"     # 卡片背景
+    text_color = "#1F1F1F"  # 主文字
+    sub_text = "#555555"    # 副標題
+    label_bg = "#E0E0E0"    # 標籤背景
+    card_shadow = "rgba(0,0,0,0.1)"
+
+# 強制渲染 CSS
+st.markdown(f"""
     <style>
-    .stApp { background-color: #0E1117; }
-    .stButton>button { border-radius: 10px; font-weight: bold; height: 3.5em; border: 1px solid #333; }
-    .stButton>button:hover { border-color: #FF4B4B; color: #FF4B4B; }
+    /* 強制修改整體的背景與文字顏色，使用 !important 避免 Edge 干預 */
+    .stApp {{
+        background-color: {main_bg} !important;
+        color: {text_color} !important;
+    }}
+    
+    /* 側邊欄文字也一併修正 */
+    [data-testid="stSidebar"] {{
+        background-color: {main_bg} !important;
+        border-right: 1px solid #333;
+    }}
+
+    .stButton>button {{
+        border-radius: 10px;
+        font-weight: bold;
+        height: 3.5em;
+        border: 1px solid #444;
+        background-color: {card_bg} !important;
+        color: {text_color} !important;
+    }}
+    
+    .stButton>button:hover {{
+        border-color: #FF4B4B !important;
+        color: #FF4B4B !important;
+    }}
     </style>
 """, unsafe_allow_html=True)
-
-st.title("📖 多益 (TOEIC) 單字強化戰情室")
-
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    df = conn.read(ttl="1m") 
-except Exception as e:
-    st.error("無法連線至 Google Sheets。")
-    st.stop()
 
 # ==============================================================================
 # 第二部分：【核心邏輯與狀態管理】
