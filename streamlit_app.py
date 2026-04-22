@@ -45,7 +45,7 @@ with st.sidebar:
             "題數": [st.session_state.score, st.session_state.total_answered - st.session_state.score]
         })
         fig = px.pie(acc_data, values='題數', names='結果', 
-                     color_discrete_sequence=['#28a745', '#dc3545'], hole=0.5)
+                     color_discrete_sequence=['#dc3545' , '#28a745'], hole=0.5)
         fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=200, showlegend=False,
                           paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
