@@ -11,7 +11,7 @@ import plotly.express as px
 # ==============================================================================
 st.set_page_config(page_title="小鐵的多益單字戰情室", page_icon="📖", layout="wide")
 
-# 初始化 Session State (確保所有 Key 在程式執行前就緒)
+# 初始化 Session State
 state_defaults = {
     'df': pd.DataFrame(),
     'quiz_data': None,
@@ -19,7 +19,7 @@ state_defaults = {
     'total_answered': 0,
     'ans_revealed': False,
     'is_correct': None,
-    'wrong_answers': [],
+    'wrong_answers': [], # 這裡存字典，包含 {'word', 'pos', 'definition', 'mastered'}
     'review_quiz_data': None
 }
 for key, value in state_defaults.items():
@@ -39,25 +39,22 @@ with st.sidebar:
     st.write("---")
     st.header("📈 學習統計")
     if st.session_state.total_answered > 0:
-        # 繪製圓餅圖
         acc_data = pd.DataFrame({
             "結果": ["正確", "錯誤"],
             "題數": [st.session_state.score, st.session_state.total_answered - st.session_state.score]
         })
         fig = px.pie(acc_data, values='題數', names='結果', 
-                     color_discrete_sequence=['#dc3545' , '#28a745'], hole=0.5)
+                     color_discrete_sequence=['#28a745', '#dc3545'], hole=0.5)
         fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=200, showlegend=False,
                           paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
-        st.metric("當前正確率", f"{(st.session_state.score/st.session_state.total_answered)*100:.1f}%")
     else:
-        st.info("尚無數據，開始練習吧！")
+        st.info("尚無數據")
 
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {main_bg} !important; color: {text_color} !important; }}
     .stButton>button {{ border-radius: 12px; height: 3.5em; border: 1px solid #444; background-color: {card_bg} !important; color: {text_color} !important; font-weight: bold; }}
-    .stButton>button:hover {{ border-color: #FF4B4B !important; color: #FF4B4B !important; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -65,43 +62,29 @@ st.markdown(f"""
 # 2. 核心邏輯
 # ==============================================================================
 def generate_question(source_df, target_state_key='quiz_data'):
-    """通用抽題函式，確保欄位對應正確"""
     if source_df is None or source_df.empty:
         st.session_state[target_state_key] = None
         return
-    
     try:
-        # 從提供的來源抽一題
         target = source_df.sample(n=1).iloc[0]
         correct_ans = target['definition']
-        
-        # 干擾項一律從總庫 (st.session_state.df) 抽取，確保選項品質
         full_pool = st.session_state.df
         distractors = full_pool[full_pool['definition'] != correct_ans].sample(n=min(3, len(full_pool)-1))['definition'].tolist()
-        
         options = distractors + [correct_ans]
         random.shuffle(options)
-        
-        st.session_state[target_state_key] = {
-            'word': target['word'], 
-            'correct_ans': correct_ans, 
-            'pos': target['pos'], 
-            'options': options
-        }
+        st.session_state[target_state_key] = {'word': target['word'], 'correct_ans': correct_ans, 'pos': target['pos'], 'options': options}
         st.session_state.ans_revealed = False
         st.session_state.is_correct = None
     except Exception as e:
-        st.error(f"題目生成失敗，請重置進度後再試：{e}")
+        st.error(f"生成失敗：{e}")
 
 @st.cache_data(ttl=60)
 def fetch_data():
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         return conn.read()
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
-# 載入資料
 st.session_state.df = fetch_data()
 
 # ==============================================================================
@@ -114,27 +97,16 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-st.title("📖 多益 (TOEIC) 單字強化戰情室")
+st.title("📖 多益單字強化戰情室")
 
-# --- 模式 1：一般測驗 ---
 if mode == "開始測驗":
     if st.session_state.df.empty:
-        st.warning("📭 單字庫為空，請確認 Google Sheets 連線或新增單字。")
+        st.warning("📭 單字庫為空。")
     else:
-        if st.session_state.quiz_data is None:
-            generate_question(st.session_state.df, 'quiz_data')
-            
+        if st.session_state.quiz_data is None: generate_question(st.session_state.df, 'quiz_data')
         q = st.session_state.quiz_data
         if q:
-            st.markdown(f"""
-                <div style="background-color: {card_bg}; padding: 30px; border-radius: 20px; border-left: 10px solid #FF4B4B; text-align: center; border: 1px solid #444;">
-                    <p style="color: #FF4B4B; font-weight: bold; margin-bottom: 5px;">VOCABULARY TEST</p>
-                    <h2 style="color: {text_color}; margin-top: 0;">「 {q['word']} 」的正確定義？</h2>
-                    <span style="background-color: {label_bg}; padding: 4px 12px; border-radius: 10px; color: #FF4B4B; font-weight: bold;">{q['pos']}</span>
-                </div>
-            """, unsafe_allow_html=True)
-            st.write("")
-
+            st.info(f"題目： {q['word']} ({q['pos']})")
             cols = st.columns(2)
             for i, option in enumerate(q['options']):
                 with cols[i % 2]:
@@ -145,83 +117,69 @@ if mode == "開始測驗":
                             st.session_state.is_correct = True
                         else:
                             st.session_state.is_correct = False
-                            # 紀錄錯題 (確保欄位名稱與資料表一致)
                             if not any(item['word'] == q['word'] for item in st.session_state.wrong_answers):
                                 st.session_state.wrong_answers.append({
-                                    'word': q['word'], 'pos': q['pos'], 'definition': q['correct_ans']
+                                    'word': q['word'], 'pos': q['pos'], 'definition': q['correct_ans'], 'mastered': False
                                 })
                         st.session_state.ans_revealed = True
                         st.rerun()
 
             if st.session_state.ans_revealed:
-                if st.session_state.is_correct: st.success("🎯 太棒了！回答正確！")
-                else: st.error(f"❌ 答錯了！正確答案是：{q['correct_ans']}")
-                
+                if st.session_state.is_correct: st.success("🎯 回答正確！")
+                else: st.error(f"❌ 錯誤！正確答案：{q['correct_ans']}")
                 if st.button("➡️ 下一題", type="primary", use_container_width=True):
                     generate_question(st.session_state.df, 'quiz_data')
                     st.rerun()
 
-# --- 模式 2：錯題挑戰 (Anki 邏輯) ---
 elif mode == "錯題強化挑戰":
     st.subheader("🔥 弱點針對訓練")
     if not st.session_state.wrong_answers:
-        st.balloons()
-        st.info("🎉 太強了！目前沒有任何錯題紀錄。")
+        st.info("目前沒有錯題紀錄。")
     else:
-        # 將清單轉為暫時的 DF 供抽題使用
-        wrong_df = pd.DataFrame(st.session_state.wrong_answers)
+        # 篩選「尚未掌握」的錯題來挑戰
+        pending_df = pd.DataFrame([item for item in st.session_state.wrong_answers if not item['mastered']])
         
-        if st.session_state.review_quiz_data is None:
-            generate_question(wrong_df, 'review_quiz_data')
-            
-        rq = st.session_state.review_quiz_data
-        if rq:
-            st.markdown(f"""
-                <div style="background-color: {card_bg}; padding: 25px; border-radius: 15px; border-top: 5px solid #FFC107; text-align: center;">
-                    <h3 style="color: {text_color};">強化複習：<span style="color: #FFC107;">{rq['word']}</span></h3>
-                </div>
-            """, unsafe_allow_html=True)
-            st.write("")
-
-            cols = st.columns(2)
-            for i, option in enumerate(rq['options']):
-                with cols[i % 2]:
-                    if st.button(option, key=f"rev_{i}", use_container_width=True):
-                        if option == rq['correct_ans']:
-                            st.toast(f"✅ 成功掌握：{rq['word']}！", icon="🔥")
-                            # 答對了，從錯題本中移除 (熟練度系統核心)
-                            st.session_state.wrong_answers = [item for item in st.session_state.wrong_answers if item['word'] != rq['word']]
-                            # 清除當前題目暫存，讓下次自動生成新題
-                            st.session_state.review_quiz_data = None
-                            st.rerun()
-                        else:
-                            st.error("還是選錯了，再想一下！")
-            
-            if st.button("⏭️ 跳過此題", use_container_width=True):
-                st.session_state.review_quiz_data = None
-                st.rerun()
+        if pending_df.empty:
+            st.balloons()
+            st.success("✨ 所有錯題皆已挑戰成功！你也可以在下方列表回顧。")
+        else:
+            if st.session_state.review_quiz_data is None: generate_question(pending_df, 'review_quiz_data')
+            rq = st.session_state.review_quiz_data
+            if rq:
+                st.warning(f"複習單字：{rq['word']}")
+                cols = st.columns(2)
+                for i, option in enumerate(rq['options']):
+                    with cols[i % 2]:
+                        if st.button(option, key=f"rev_{i}", use_container_width=True):
+                            if option == rq['correct_ans']:
+                                st.toast(f"✅ 成功掌握：{rq['word']}！")
+                                # 修正狀態：將該單字標記為 mastered
+                                for item in st.session_state.wrong_answers:
+                                    if item['word'] == rq['word']: item['mastered'] = True
+                                st.session_state.review_quiz_data = None
+                                st.rerun()
+                            else: st.error("選錯了，再想一下！")
+                if st.button("⏭️ 跳過此題"):
+                    st.session_state.review_quiz_data = None
+                    st.rerun()
         
+        # --- 永遠顯示的歷史紀錄區 ---
         st.write("---")
-        with st.expander("查看目前待加強清單"):
-            st.table(wrong_df[['word', 'pos', 'definition']])
+        st.subheader("🔍 歷史錯題本 (回顧)")
+        history_df = pd.DataFrame(st.session_state.wrong_answers)
+        if not history_df.empty:
+            # 將 True/False 轉為更直觀的圖示
+            history_df['狀態'] = history_df['mastered'].apply(lambda x: "✅ 已掌握" if x else "❌ 待加強")
+            st.table(history_df[['word', 'pos', 'definition', '狀態']])
 
-# --- 模式 3：新增單字 ---
 elif mode == "新增單字庫":
     st.subheader("➕ 擴充雲端單字庫")
     try:
         url = st.secrets["connections"]["gsheets"]["script_url"]
         with st.form("add_form", clear_on_submit=True):
-            col1, col2 = st.columns([2, 1])
-            w = col1.text_input("英文單字 (Word)")
-            p = col2.selectbox("詞性 (POS)", ["n.", "v.", "adj.", "adv.", "phr."])
-            d = st.text_input("中文定義 (Definition)")
-            if st.form_submit_button("💾 儲存並同步到 Google Sheets", use_container_width=True):
+            w = st.text_input("英文單字"); p = st.selectbox("詞性", ["n.", "v.", "adj.", "adv.", "phr."]); d = st.text_input("中文定義")
+            if st.form_submit_button("💾 儲存並同步"):
                 if w and d:
                     res = requests.post(url, json={"method": "write", "word": w, "pos": p, "definition": d})
-                    if res.status_code == 200:
-                        st.success(f"✅ 單字『{w}』已成功加入！資料約 60 秒後同步。")
-                        st.cache_data.clear()
-                    else: st.error("寫入失敗，請檢查 Script URL 有效性。")
-                else: st.warning("請完整填寫單字與定義。")
-    except Exception:
-        st.error("請確認 .streamlit/secrets.toml 中已配置 script_url。")
+                    st.success(f"✅ 『{w}』已送出！"); st.cache_data.clear()
+    except: st.error("請確認 Secrets 設定。")
