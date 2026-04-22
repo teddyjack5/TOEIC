@@ -33,8 +33,10 @@ with st.sidebar:
     
     if theme_mode == "深色模式 (Dark)":
         main_bg, card_bg, text_color, label_bg = "#0E1117", "#1E1E1E", "#FFFFFF", "#333333"
+        quiz_box_bg = "#1A2E44"  # 深藍色背景
     else:
-        main_bg, card_bg, text_color, label_bg = "#FFFFFF", "#F0F2F6", "#1F1F1F", "#555555"
+        main_bg, card_bg, text_color, label_bg = "#FFFFFF", "#F0F2F6", "#1F1F1F", "#E0E0E0"
+        quiz_box_bg = "#E1F5FE"  # 淺藍色背景
 
     st.write("---")
     st.header("📈 學習統計")
@@ -51,12 +53,34 @@ with st.sidebar:
     else:
         st.info("尚無數據")
 
-# CSS 注入
+# CSS 注入 (加強題目文字與外框樣式)
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {main_bg} !important; color: {text_color} !important; }}
     .stButton>button {{ border-radius: 12px; height: 3.5em; border: 1px solid #444; background-color: {card_bg} !important; color: {text_color} !important; font-weight: bold; }}
-    .stExpander {{ border-radius: 12px; border: 1px solid #444; background-color: {card_bg}; }}
+    
+    /* 核心優化：題目卡片樣式 */
+    .quiz-container {{
+        background-color: {quiz_box_bg};
+        padding: 40px 20px;
+        border-radius: 15px;
+        text-align: center;
+        margin-bottom: 25px;
+        border: 1px solid #444;
+    }}
+    .quiz-word {{
+        font-size: 48px !important;
+        font-weight: 800 !important;
+        color: {text_color};
+        margin-bottom: 5px;
+        letter-spacing: 2px;
+    }}
+    .quiz-pos {{
+        font-size: 20px;
+        color: #FF4B4B;
+        font-style: italic;
+        font-weight: bold;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -94,7 +118,7 @@ st.session_state.df = fetch_data()
 # ==============================================================================
 with st.sidebar:
     mode = st.radio("🚀 功能模式切換", ["開始測驗", "錯題強化挑戰", "新增單字庫"])
-    if st.button("♻️ 重置所有進度", use_container_width=True):
+    if st.button("♻️ 重置進度", use_container_width=True):
         st.session_state.update({"score": 0, "total_answered": 0, "wrong_answers": [], "quiz_data": None, "review_quiz_data": None})
         st.cache_data.clear()
         st.rerun()
@@ -108,7 +132,14 @@ if mode == "開始測驗":
         if st.session_state.quiz_data is None: generate_question(st.session_state.df, 'quiz_data')
         q = st.session_state.quiz_data
         if q:
-            st.info(f"題目： {q['word']} ({q['pos']})")
+            # --- 核心優化區：置中放大題目 ---
+            st.markdown(f"""
+                <div class="quiz-container">
+                    <div class="quiz-word">{q['word']}</div>
+                    <div class="quiz-pos">({q['pos']})</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
             cols = st.columns(2)
             for i, option in enumerate(q['options']):
                 with cols[i % 2]:
@@ -138,9 +169,7 @@ elif mode == "錯題強化挑戰":
     if not st.session_state.wrong_answers:
         st.info("目前沒有錯題紀錄。")
     else:
-        # 篩選「尚未掌握」的錯題來挑戰
         pending_df = pd.DataFrame([item for item in st.session_state.wrong_answers if not item['mastered']])
-        
         if pending_df.empty:
             st.balloons()
             st.success("✨ 所有錯題皆已挑戰成功！")
@@ -148,7 +177,14 @@ elif mode == "錯題強化挑戰":
             if st.session_state.review_quiz_data is None: generate_question(pending_df, 'review_quiz_data')
             rq = st.session_state.review_quiz_data
             if rq:
-                st.warning(f"複習單字：{rq['word']}")
+                # --- 錯題挑戰同樣也套用置中放大樣式 ---
+                st.markdown(f"""
+                    <div class="quiz-container" style="border-top: 5px solid #FFC107;">
+                        <div class="quiz-word">{rq['word']}</div>
+                        <div class="quiz-pos">({rq['pos']})</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
                 cols = st.columns(2)
                 for i, option in enumerate(rq['options']):
                     with cols[i % 2]:
@@ -160,19 +196,16 @@ elif mode == "錯題強化挑戰":
                                 st.session_state.review_quiz_data = None
                                 st.rerun()
                             else: st.error("選錯了，再想一下！")
-                if st.button("⏭️ 跳過此題"):
+                if st.button("⏭️ 跳過此題", use_container_width=True):
                     st.session_state.review_quiz_data = None
                     st.rerun()
         
-        # --- 核心改進：使用 st.expander 收折歷史紀錄 ---
         st.write("---")
         with st.expander("🔍 查看歷史錯題本 (回顧歷程)", expanded=False):
             history_df = pd.DataFrame(st.session_state.wrong_answers)
             if not history_df.empty:
                 history_df['狀態'] = history_df['mastered'].apply(lambda x: "✅ 已掌握" if x else "❌ 待加強")
                 st.table(history_df[['word', 'pos', 'definition', '狀態']])
-            else:
-                st.write("目前尚無歷史紀錄。")
 
 elif mode == "新增單字庫":
     st.subheader("➕ 擴充雲端單字庫")
