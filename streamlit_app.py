@@ -134,3 +134,30 @@ elif mode == "新增單字庫":
                 if res.status_code == 200:
                     st.success("成功！"); st.cache_data.clear()
             else: st.warning("請填寫完整")
+
+# --- 模式：錯題複習 ---
+elif mode == "錯題複習":
+    st.subheader("🔍 我的錯題戰情本")
+    
+    # 檢查是否有錯題紀錄
+    if st.session_state.wrong_answers:
+        # 將紀錄轉成 DataFrame 顯示更精美
+        wrong_df = pd.DataFrame(st.session_state.wrong_answers)
+        
+        # 顯示錯題表格
+        st.table(wrong_df)
+        
+        # 提供一個清空記錄的按鈕
+        st.write("---")
+        if st.button("🗑️ 清空所有錯題記錄", use_container_width=True):
+            st.session_state.wrong_answers = []
+            st.success("記錄已清空！")
+            st.rerun()
+    else:
+        # 防呆：如果還沒開始測驗或全對，顯示提示
+        st.info("🎉 目前沒有錯題記錄，表現太棒了！繼續保持！")
+        st.markdown(f"""
+            <div style="background-color: {card_bg}; padding: 20px; border-radius: 15px; text-align: center; color: {sub_text}; border: 1px dashed #444;">
+                快去『開始測驗』挑戰看看吧！
+            </div>
+        """, unsafe_allow_html=True)
