@@ -219,7 +219,7 @@ elif mode == "新增單字庫":
         d = st.text_input("中文定義")
         
         # 新增 point 欄位
-        pt = st.text_input("出題重點 (Point)", placeholder="例如：常與介系詞 with 連用...")
+        pt = st.text_area("出題重點 (Point)", placeholder="例如：常與介系詞 with 連用...")
         
         ex = st.text_area("例句 (Example Sentence)", placeholder="請輸入此單字的用法例句...")
         
