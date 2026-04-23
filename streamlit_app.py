@@ -22,7 +22,6 @@ def get_global_progress():
 progress = get_global_progress()
 
 if 'quiz_data' not in st.session_state: st.session_state.quiz_data = None
-if 'review_quiz_data' not in st.session_state: st.session_state.review_quiz_data = None
 if 'ans_revealed' not in st.session_state: st.session_state.ans_revealed = False
 if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 
@@ -56,7 +55,7 @@ with st.sidebar:
     else:
         st.info("尚無數據，開始練習吧！")
 
-# CSS 增加例句卡片樣式
+# CSS 設定
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {main_bg} !important; color: {text_color} !important; }}
@@ -82,6 +81,16 @@ st.markdown(f"""
         margin-bottom: 5px;
         font-size: 0.9em;
     }}
+    /* 出題重點框 */
+    .point-box {{
+        background-color: #FFF3E0;
+        border-left: 5px solid #FF9800;
+        padding: 12px 20px;
+        margin: 10px 0;
+        border-radius: 8px;
+        color: #E65100;
+        font-weight: 500;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -97,18 +106,17 @@ def generate_question(source_df, target_state_key='quiz_data'):
         options = distractors + [target['definition']]
         random.shuffle(options)
         
-        # 讀取例句欄位 (需對應 Google Sheets 欄位名稱)
-        if 'example' in target and pd.notna(target['example']):
-            ex_val = str(target['example'])
-        else:
-            ex_val = ""
+        # 讀取欄位 (加入 point)
+        ex_val = str(target['example']) if 'example' in target and pd.notna(target['example']) else ""
+        pt_val = str(target['point']) if 'point' in target and pd.notna(target['point']) else ""
             
         st.session_state[target_state_key] = {
             'word': target['word'], 
             'correct_ans': target['definition'], 
             'pos': target['pos'], 
             'options': options,
-            'example': ex_val
+            'example': ex_val,
+            'point': pt_val
         }
         st.session_state.ans_revealed = False
         st.session_state.is_correct = None
@@ -164,29 +172,42 @@ if mode == "開始測驗":
                 st.write("") 
                 if st.session_state.is_correct:
                     st.success("🎯 太棒了！回答正確！")
-                    # ✨ 成功時顯示例句
-                    if q['example'] and q['example'].strip() != "":
-                        st.markdown(f"""
-                            <div class="example-box">
-                                <div class="example-label">💡 Usage Example:</div>
-                                {q['example']}
-                            </div>
-                        """, unsafe_allow_html=True)
                 else:
                     st.error(f"❌ 不對喔！正確答案是：**{q['correct_ans']}**")
-                    if q['example']:
-                        st.info(f"💡 參考例句：{q['example']}")
+                
+                # --- 顯示例句與出題重點 ---
+                if q['point'] and q['point'].strip() != "":
+                    st.markdown(f'<div class="point-box"><b>📌 出題重點：</b>{q["point"]}</div>', unsafe_allow_html=True)
+
+                if q['example'] and q['example'].strip() != "":
+                    st.markdown(f"""
+                        <div class="example-box">
+                            <div class="example-label">💡 Usage Example:</div>
+                            {q['example']}
+                        </div>
+                    """, unsafe_allow_html=True)
                 
                 if st.button("➡️ 下一題", type="primary", use_container_width=True):
                     generate_question(st.session_state.full_df, 'quiz_data')
                     st.rerun()
 
-# --- 模式 2 與 3 保持你剛才的程式碼即可 ---
+# --- 模式 2：錯題強化挑戰 ---
 elif mode == "錯題強化挑戰":
-    # ... (此處省略，維持你原本的版本) ...
     st.subheader("🔥 弱點針對訓練")
-    # [請放回你原本模式 2 的程式碼]
+    if not progress['wrong_answers']:
+        st.info("目前沒有錯題記錄，繼續保持！")
+    else:
+        # 簡單過濾未精通的錯題
+        unmastered = [item for item in progress['wrong_answers'] if not item['mastered']]
+        if not unmastered:
+            st.success("🎉 所有錯題都挑戰成功了！")
+        else:
+            # 這裡可以實作錯題的 Quiz 邏輯，與開始測驗類似
+            st.write(f"目前有 {len(unmastered)} 個待加強單字。")
+            for item in unmastered:
+                st.write(f"- **{item['word']}**: {item['definition']}")
 
+# --- 模式 3：新增單字庫 ---
 elif mode == "新增單字庫":
     st.subheader("➕ 擴充雲端單字庫")
     url = st.secrets["connections"]["gsheets"]["script_url"]
@@ -194,14 +215,28 @@ elif mode == "新增單字庫":
         col1, col2 = st.columns([3, 1])
         with col1: w = st.text_input("英文單字")
         with col2: p = st.selectbox("詞性", ["n.", "v.", "adj.", "adv.", "phr."])
+        
         d = st.text_input("中文定義")
+        
+        # 新增 point 欄位
+        pt = st.text_input("出題重點 (Point)", placeholder="例如：常與介系詞 with 連用...")
+        
         ex = st.text_area("例句 (Example Sentence)", placeholder="請輸入此單字的用法例句...")
+        
         if st.form_submit_button("💾 儲存並同步"):
             if w and d:
-                payload = {"method": "write", "word": w, "pos": p, "definition": d, "example": ex}
+                payload = {
+                    "method": "write", 
+                    "word": w, 
+                    "pos": p, 
+                    "definition": d, 
+                    "point": pt, 
+                    "example": ex
+                }
                 try:
                     res = requests.post(url, json=payload)
                     if res.status_code == 200:
                         st.success(f"✅ 『{w}』及其例句已送出！")
                         st.cache_data.clear()
-                except Exception as e: st.error(f"錯誤：{e}")
+                except Exception as e: 
+                    st.error(f"錯誤：{e}")
