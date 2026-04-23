@@ -199,9 +199,41 @@ elif mode == "錯題強化挑戰":
 elif mode == "新增單字庫":
     st.subheader("➕ 擴充雲端單字庫")
     url = st.secrets["connections"]["gsheets"]["script_url"]
+    
     with st.form("add_form", clear_on_submit=True):
-        w = st.text_input("英文單字"); p = st.selectbox("詞性", ["n.", "v.", "adj.", "adv.", "phr."]); d = st.text_input("定義")
+        # 第一排：單字與詞性
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            w = st.text_input("英文單字")
+        with col2:
+            p = st.selectbox("詞性", ["n.", "v.", "adj.", "adv.", "phr."])
+        
+        # 第二排：定義
+        d = st.text_input("中文定義")
+        
+        # 第三排：例句 (新增欄位)
+        ex = st.text_area("例句 (Example Sentence)", placeholder="請輸入此單字的用法例句...")
+        
+        # 提交按鈕
         if st.form_submit_button("💾 儲存並同步"):
             if w and d:
-                requests.post(url, json={"method": "write", "word": w, "pos": p, "definition": d})
-                st.success(f"✅ 『{w}』已送出！"); st.cache_data.clear()
+                # 在 JSON 資料中多傳入 "example" 鍵值
+                payload = {
+                    "method": "write", 
+                    "word": w, 
+                    "pos": p, 
+                    "definition": d,
+                    "example": ex  # 👈 送出例句
+                }
+                
+                try:
+                    res = requests.post(url, json=payload)
+                    if res.status_code == 200:
+                        st.success(f"✅ 『{w}』及其例句已送出！")
+                        st.cache_data.clear()
+                    else:
+                        st.error(f"傳輸失敗，錯誤碼：{res.status_code}")
+                except Exception as e:
+                    st.error(f"發生錯誤：{e}")
+            else:
+                st.warning("⚠️ 請務必填寫單字與定義！")
