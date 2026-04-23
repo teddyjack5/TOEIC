@@ -98,8 +98,11 @@ def generate_question(source_df, target_state_key='quiz_data'):
         random.shuffle(options)
         
         # 讀取例句欄位 (需對應 Google Sheets 欄位名稱)
-        ex_val = target['example'] if 'example' in target and pd.notna(target['example']) else ""
-        
+        if 'example' in target and pd.notna(target['example']):
+            ex_val = str(target['example'])
+        else:
+            ex_val = ""
+            
         st.session_state[target_state_key] = {
             'word': target['word'], 
             'correct_ans': target['definition'], 
@@ -109,7 +112,8 @@ def generate_question(source_df, target_state_key='quiz_data'):
         }
         st.session_state.ans_revealed = False
         st.session_state.is_correct = None
-    except Exception as e: st.error(f"生成失敗：{e}")
+    except Exception as e: 
+        st.error(f"生成失敗：{e}")
 
 @st.cache_data(ttl=60)
 def fetch_data():
@@ -161,7 +165,7 @@ if mode == "開始測驗":
                 if st.session_state.is_correct:
                     st.success("🎯 太棒了！回答正確！")
                     # ✨ 成功時顯示例句
-                    if q['example']:
+                    if q['example'] and q['example'].strip() != "":
                         st.markdown(f"""
                             <div class="example-box">
                                 <div class="example-label">💡 Usage Example:</div>
