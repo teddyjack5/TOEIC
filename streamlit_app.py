@@ -4,6 +4,7 @@ import pandas as pd
 import random
 import requests
 import plotly.express as px
+import re
 
 # ==============================================================================
 # 1. 頁面與持久化設定
@@ -25,10 +26,29 @@ if 'quiz_data' not in st.session_state: st.session_state.quiz_data = None
 if 'ans_revealed' not in st.session_state: st.session_state.ans_revealed = False
 if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 
+# ==============================================================================
+# 🔊 自動發音函數 (JavaScript 注入)
+# ==============================================================================
+def speak_word(text):
+    if text:
+        # 使用 Web Speech API 直接控制瀏覽器發音
+        js_code = f"""
+            <script>
+            var msg = new SpeechSynthesisUtterance();
+            msg.text = "{text}";
+            msg.lang = "en-US";
+            msg.rate = 0.9;
+            window.speechSynthesis.speak(msg);
+            </script>
+        """
+        st.components.v1.html(js_code, height=0)
+
 # 側邊欄設定
 with st.sidebar:
     st.header("🎨 介面設定")
     theme_mode = st.selectbox("切換主題模式", ["深色模式 (Dark)", "淺色模式 (Light)"])
+    quiz_mode_type = st.selectbox("📝 測驗題型", ["標準選擇題", "填空挑戰 (Cloze)"])
+    auto_audio = st.checkbox("🔊 答題後自動發音", value=True)
     
     if theme_mode == "深色模式 (Dark)":
         main_bg, card_bg, text_color = "#0E1117", "#1E1E1E", "#FFFFFF"
@@ -51,9 +71,6 @@ with st.sidebar:
         fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=200, showlegend=False,
                           paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
-        st.metric("當前正確率", f"{(progress['score']/progress['total_answered'])*100:.1f}%")
-    else:
-        st.info("尚無數據，開始練習吧！")
 
 # CSS 設定
 st.markdown(f"""
@@ -62,35 +79,10 @@ st.markdown(f"""
     .stButton>button {{ border-radius: 12px; height: 3.5em; border: 1px solid #444; background-color: {card_bg} !important; color: {text_color} !important; font-weight: bold; }}
     .quiz-container {{ background-color: {quiz_box_bg}; padding: 40px 20px; border-radius: 15px; text-align: center; margin-bottom: 25px; border: 1px solid #444; }}
     .quiz-word {{ font-size: 48px !important; font-weight: 800 !important; color: {text_color}; margin-bottom: 5px; }}
+    .cloze-sentence {{ font-size: 24px !important; color: {text_color}; line-height: 1.5; }}
     .quiz-pos {{ font-size: 20px; color: #FF4B4B; font-weight: bold; }}
-    
-    /* 例句美化框 */
-    .example-box {{
-        background-color: {ex_bg};
-        border-left: 5px solid #28a745;
-        padding: 15px 20px;
-        margin: 15px 0;
-        border-radius: 8px;
-        font-style: italic;
-        color: {text_color};
-        line-height: 1.6;
-    }}
-    .example-label {{
-        color: #28a745;
-        font-weight: bold;
-        margin-bottom: 5px;
-        font-size: 0.9em;
-    }}
-    /* 出題重點框 */
-    .point-box {{
-        background-color: #FFF3E0;
-        border-left: 5px solid #FF9800;
-        padding: 12px 20px;
-        margin: 10px 0;
-        border-radius: 8px;
-        color: #E65100;
-        font-weight: 500;
-    }}
+    .example-box {{ background-color: {ex_bg}; border-left: 5px solid #28a745; padding: 15px 20px; margin: 15px 0; border-radius: 8px; font-style: italic; color: {text_color}; line-height: 1.6; }}
+    .point-box {{ background-color: #FFF3E0; border-left: 5px solid #FF9800; padding: 12px 20px; margin: 10px 0; border-radius: 8px; color: #E65100; font-weight: 500; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -100,23 +92,42 @@ st.markdown(f"""
 def generate_question(source_df, target_state_key='quiz_data'):
     if source_df is None or source_df.empty: return
     try:
+        # 確保填空題模式時，只抽有例句的單字
+        if quiz_mode_type == "填空挑戰 (Cloze)":
+            source_df = source_df[source_df['example'].notna() & (source_df['example'] != "")]
+        
         target = source_df.sample(n=1).iloc[0]
         full_pool = st.session_state.get('full_df', pd.DataFrame())
-        distractors = full_pool[full_pool['definition'] != target['definition']].sample(n=min(3, len(full_pool)-1))['definition'].tolist()
-        options = distractors + [target['definition']]
+        
+        # 準備選項
+        if quiz_mode_type == "標準選擇題":
+            distractors = full_pool[full_pool['definition'] != target['definition']].sample(n=min(3, len(full_pool)-1))['definition'].tolist()
+            correct_ans = target['definition']
+        else: # 填空挑戰：選項是「單字」本身
+            distractors = full_pool[full_pool['word'] != target['word']].sample(n=min(3, len(full_pool)-1))['word'].tolist()
+            correct_ans = target['word']
+
+        options = distractors + [correct_ans]
         random.shuffle(options)
         
-        # 讀取欄位 (加入 point)
         ex_val = str(target['example']) if 'example' in target and pd.notna(target['example']) else ""
         pt_val = str(target['point']) if 'point' in target and pd.notna(target['point']) else ""
-            
+        
+        # 處理填空題題目文字
+        cloze_text = ""
+        if quiz_mode_type == "填空挑戰 (Cloze)" and ex_val:
+            # 忽略大小寫替換關鍵字
+            pattern = re.compile(re.escape(target['word']), re.IGNORECASE)
+            cloze_text = pattern.sub(" _______ ", ex_val)
+
         st.session_state[target_state_key] = {
             'word': target['word'], 
-            'correct_ans': target['definition'], 
+            'correct_ans': correct_ans, 
             'pos': target['pos'], 
             'options': options,
             'example': ex_val,
-            'point': pt_val
+            'point': pt_val,
+            'cloze_text': cloze_text
         }
         st.session_state.ans_revealed = False
         st.session_state.is_correct = None
@@ -137,22 +148,25 @@ st.session_state.full_df = fetch_data()
 # ==============================================================================
 with st.sidebar:
     mode = st.radio("🚀 功能模式切換", ["開始測驗", "錯題強化挑戰", "新增單字庫"])
-    if st.button("♻️ 手動重置所有進度", use_container_width=True):
-        progress.update({'score': 0, 'total_answered': 0, 'wrong_answers': [], 'mastery_ids': set()})
-        st.rerun()
 
 st.title("📖 多益單字強化練習")
 
-# --- 模式 1：開始測驗 ---
 if mode == "開始測驗":
     if st.session_state.full_df.empty:
         st.warning("📭 單字庫為空。")
     else:
         if st.session_state.quiz_data is None: generate_question(st.session_state.full_df, 'quiz_data')
         q = st.session_state.quiz_data
+        
         if q:
-            st.markdown(f'<div class="quiz-container"><div class="quiz-word">{q["word"]}</div><div class="quiz-pos">({q["pos"]})</div></div>', unsafe_allow_html=True)
+            # --- 題目顯示區 ---
+            with st.container():
+                if quiz_mode_type == "標準選擇題":
+                    st.markdown(f'<div class="quiz-container"><div class="quiz-word">{q["word"]}</div><div class="quiz-pos">({q["pos"]})</div></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="quiz-container"><div class="cloze-sentence">{q["cloze_text"]}</div><div class="quiz-pos">({q["pos"]})</div></div>', unsafe_allow_html=True)
             
+            # --- 選項按鈕 ---
             cols = st.columns(2)
             for i, option in enumerate(q['options']):
                 with cols[i % 2]:
@@ -164,48 +178,32 @@ if mode == "開始測驗":
                         else:
                             st.session_state.is_correct = False
                             if not any(item['word'] == q['word'] for item in progress['wrong_answers']):
-                                progress['wrong_answers'].append({'word': q['word'], 'pos': q['pos'], 'definition': q['correct_ans'], 'mastered': False})
+                                progress['wrong_answers'].append({'word': q['word'], 'pos': q['pos'], 'definition': q['word'], 'mastered': False})
                         st.session_state.ans_revealed = True
+                        if auto_audio: speak_word(q['word']) # 自動發音
                         st.rerun()
 
+            # --- 回饋區 ---
             if st.session_state.ans_revealed:
-                st.write("") 
                 if st.session_state.is_correct:
                     st.success("🎯 太棒了！回答正確！")
                 else:
                     st.error(f"❌ 不對喔！正確答案是：**{q['correct_ans']}**")
                 
-                # --- 顯示例句與出題重點 ---
-                if q['point'] and q['point'].strip() != "":
+                col_audio, col_empty = st.columns([1, 5])
+                with col_audio:
+                    if st.button("🔊 重播發音"): speak_word(q['word'])
+
+                if q['point']:
                     st.markdown(f'<div class="point-box"><b>📌 出題重點：</b>{q["point"]}</div>', unsafe_allow_html=True)
 
-                if q['example'] and q['example'].strip() != "":
-                    st.markdown(f"""
-                        <div class="example-box">
-                            <div class="example-label">💡 Usage Example:</div>
-                            {q['example']}
-                        </div>
-                    """, unsafe_allow_html=True)
+                if q['example']:
+                    # 填空模式顯示原文例句（含答案）
+                    st.markdown(f'<div class="example-box"><div class="example-label">💡 Usage Example:</div>{q["example"]}</div>', unsafe_allow_html=True)
                 
                 if st.button("➡️ 下一題", type="primary", use_container_width=True):
                     generate_question(st.session_state.full_df, 'quiz_data')
                     st.rerun()
-
-# --- 模式 2：錯題強化挑戰 ---
-elif mode == "錯題強化挑戰":
-    st.subheader("🔥 弱點針對訓練")
-    if not progress['wrong_answers']:
-        st.info("目前沒有錯題記錄，繼續保持！")
-    else:
-        # 簡單過濾未精通的錯題
-        unmastered = [item for item in progress['wrong_answers'] if not item['mastered']]
-        if not unmastered:
-            st.success("🎉 所有錯題都挑戰成功了！")
-        else:
-            # 這裡可以實作錯題的 Quiz 邏輯，與開始測驗類似
-            st.write(f"目前有 {len(unmastered)} 個待加強單字。")
-            for item in unmastered:
-                st.write(f"- **{item['word']}**: {item['definition']}")
 
 # --- 模式 3：新增單字庫 ---
 elif mode == "新增單字庫":
