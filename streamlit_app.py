@@ -7,6 +7,8 @@ import plotly.express as px
 import re
 import urllib.parse
 import time
+from gtts import gTTS
+import io
 
 # ==============================================================================
 # 1. 頁面與持久化設定
@@ -33,24 +35,19 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 # ==============================================================================
 def speak_text(text):
     if text:
-        # 1. 處理文字編碼
-        clean_text = text.replace('"', '').replace("'", "").replace("\n", " ")
-        encoded_text = urllib.parse.quote(clean_text)
-        audio_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded_text}&tl=en&client=tw-ob"
-        
-        # 2. 使用 JS 強制瀏覽器播放音訊物件，這比 <audio> 標籤更穩定
-        js_code = f"""
-            <script>
-            (function() {{
-                var audio = new Audio("{audio_url}");
-                audio.play().catch(function(error) {{
-                    console.log("Autoplay blocked or failed:", error);
-                }});
-            }})();
-            </script>
-        """
-        # 這裡必須賦予一個隨機的 key，否則 Streamlit 可能不會重新執行這段 JS
-        st.components.v1.html(js_code, height=0)
+        try:
+            # 1. 使用 gTTS 產生語音
+            tts = gTTS(text=text, lang='en', slow=False)
+            
+            # 2. 將語音存入記憶體 (BytesIO)，避免產生實體檔案佔空間
+            audio_fp = io.BytesIO()
+            tts.write_to_fp(audio_fp)
+            
+            # 3. 使用 Streamlit 原生音訊組件播放
+            # autoplay=True 讓它像之前一樣自動執行
+            st.audio(audio_fp, format="audio/mp3", autoplay=True)
+        except Exception as e:
+            st.error(f"發音失敗: {e}")
 
 # 側邊欄設定
 with st.sidebar:
