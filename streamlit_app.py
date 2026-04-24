@@ -36,15 +36,20 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 def speak_text(text):
     if text:
         try:
-            # 1. 使用 gTTS 產生語音
-            tts = gTTS(text=text, lang='en', slow=False)
+            # 【關鍵優化】使用正則表達式只保留英文、數字與標點符號
+            # 這個 pattern 會過濾掉所有中文字（Unicode 範圍外的字元）
+            english_only = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\'\";:-]+', text))
             
-            # 2. 將語音存入記憶體 (BytesIO)，避免產生實體檔案佔空間
+            if not english_only.strip():
+                return # 如果過濾完沒東西就不發音
+                
+            # 使用 gTTS 產生語音
+            tts = gTTS(text=english_only, lang='en', slow=False)
+            
             audio_fp = io.BytesIO()
             tts.write_to_fp(audio_fp)
             
-            # 3. 使用 Streamlit 原生音訊組件播放
-            # autoplay=True 讓它像之前一樣自動執行
+            # 使用 Streamlit 原生組件播放
             st.audio(audio_fp, format="audio/mp3", autoplay=True)
         except Exception as e:
             st.error(f"發音失敗: {e}")
