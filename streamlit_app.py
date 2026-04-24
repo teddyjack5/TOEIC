@@ -182,7 +182,7 @@ if mode == "開始測驗":
                             if not any(item['word'] == q['word'] for item in progress['wrong_answers']):
                                 progress['wrong_answers'].append({'word': q['word'], 'pos': q['pos'], 'definition': q['word'], 'mastered': False})
                         st.session_state.ans_revealed = True
-                        if auto_audio: speak_word(q['word']) # 自動發音
+                        if auto_audio: speak_text(q['word']) # 自動發音
                         st.rerun()
 
             # --- 回饋區 ---
