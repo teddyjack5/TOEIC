@@ -30,26 +30,20 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 # ==============================================================================
 # 🔊 自動發音函數 (JavaScript 注入)
 # ==============================================================================
-def speak_word(text):
+def speak_text(text, speed=True):
     if text:
-        # 使用隨機數確保每次生成的 HTML 組件都是獨一無二的，避免執行延遲
-        rid = time.time()
-        js_code = f"""
-            <div style="display:none;" id="audio_{rid}"></div>
-            <script>
-            (function() {{
-                var msg = new SpeechSynthesisUtterance();
-                msg.text = "{text}";
-                msg.lang = "en-US";
-                msg.rate = 0.9;
-                // 確保語音引擎已準備好
-                window.speechSynthesis.cancel(); // 先停止之前的發音，避免累積
-                window.speechSynthesis.speak(msg);
-            }})();
-            </script>
+        # 清理文字中的特殊字元，避免 URL 錯誤
+        clean_text = text.replace('"', '').replace("'", "").replace("\n", " ")
+        # speed 為 True 速度正常(1.0)，False 則稍微慢一點(0.8)
+        # 這裡利用 Google TTS 介面
+        audio_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={clean_text}&tl=en&client=tw-ob"
+        
+        audio_html = f"""
+            <audio autoplay style="display:none;">
+                <source src="{audio_url}" type="audio/mpeg">
+            </audio>
         """
-        # 賦予唯一的 key 值是 Streamlit 避免組件失效的關鍵
-        st.components.v1.html(js_code, height=0)
+        st.markdown(audio_html, unsafe_allow_html=True)
 
 # 側邊欄設定
 with st.sidebar:
@@ -198,16 +192,25 @@ if mode == "開始測驗":
                 else:
                     st.error(f"❌ 不對喔！正確答案是：**{q['correct_ans']}**")
                 
-                col_audio, col_empty = st.columns([1, 5])
-                with col_audio:
-                    if st.button("🔊 重播發音"): speak_word(q['word'])
+                # --- 修改後的發音按鈕區 (單字 + 例句) ---
+                c1, c2, _ = st.columns([1, 1, 3]) # 增加一欄給例句發音
+                with c1:
+                    if st.button("🔊 單字"): speak_word(q['word'])
+                with c2:
+                    if q['example']: # 有例句才顯示按鈕
+                        if st.button("📢 例句"): speak_word(q['example'])
 
                 if q['point']:
                     st.markdown(f'<div class="point-box"><b>📌 出題重點：</b>{q["point"]}</div>', unsafe_allow_html=True)
 
                 if q['example']:
-                    # 填空模式顯示原文例句（含答案）
-                    st.markdown(f'<div class="example-box"><div class="example-label">💡 Usage Example:</div>{q["example"]}</div>', unsafe_allow_html=True)
+                    # 顯示例句文字
+                    st.markdown(f"""
+                        <div class="example-box">
+                            <div class="example-label">💡 Usage Example:</div>
+                            {q['example']}
+                        </div>
+                    """, unsafe_allow_html=True)
                 
                 if st.button("➡️ 下一題", type="primary", use_container_width=True):
                     generate_question(st.session_state.full_df, 'quiz_data')
