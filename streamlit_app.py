@@ -5,6 +5,7 @@ import random
 import requests
 import plotly.express as px
 import re
+import urllib.parse
 import time
 
 # ==============================================================================
@@ -32,18 +33,22 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 # ==============================================================================
 def speak_text(text, speed=True):
     if text:
-        # 清理文字中的特殊字元，避免 URL 錯誤
-        clean_text = text.replace('"', '').replace("'", "").replace("\n", " ")
-        # speed 為 True 速度正常(1.0)，False 則稍微慢一點(0.8)
-        # 這裡利用 Google TTS 介面
-        audio_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={clean_text}&tl=en&client=tw-ob"
+        # 1. URL 編碼處理：確保空格和特殊字元能被 Google 正確讀取
+        query = urllib.parse.quote(text)
+        # 2. 加入隨機 timestamp：強制瀏覽器每次都視為新的音訊請求，觸發 autoplay
+        timestamp = time.time()
         
+        audio_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={query}&tl=en&client=tw-ob&ttsspeed=1&ts={timestamp}"
+        
+        # 3. 使用 st.empty() 或確保唯一性
         audio_html = f"""
-            <audio autoplay style="display:none;">
+            <audio autoplay key="{timestamp}">
                 <source src="{audio_url}" type="audio/mpeg">
             </audio>
         """
-        st.markdown(audio_html, unsafe_allow_html=True)
+        # 為了隱藏播放器但確保執行，我們不使用 display:none 有時會被瀏覽器優化掉
+        # 改用一個極小的寬高
+        st.components.v1.html(audio_html, height=0, width=0)
 
 # 側邊欄設定
 with st.sidebar:
