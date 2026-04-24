@@ -31,24 +31,26 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 # ==============================================================================
 # 🔊 自動發音函數 (JavaScript 注入)
 # ==============================================================================
-def speak_text(text, speed=True):
+def speak_text(text):
     if text:
-        # 1. URL 編碼處理：確保空格和特殊字元能被 Google 正確讀取
-        query = urllib.parse.quote(text)
-        # 2. 加入隨機 timestamp：強制瀏覽器每次都視為新的音訊請求，觸發 autoplay
-        timestamp = time.time()
+        # 1. 處理文字編碼
+        clean_text = text.replace('"', '').replace("'", "").replace("\n", " ")
+        encoded_text = urllib.parse.quote(clean_text)
+        audio_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded_text}&tl=en&client=tw-ob"
         
-        audio_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={query}&tl=en&client=tw-ob&ttsspeed=1&ts={timestamp}"
-        
-        # 3. 使用 st.empty() 或確保唯一性
-        audio_html = f"""
-            <audio autoplay key="{timestamp}">
-                <source src="{audio_url}" type="audio/mpeg">
-            </audio>
+        # 2. 使用 JS 強制瀏覽器播放音訊物件，這比 <audio> 標籤更穩定
+        js_code = f"""
+            <script>
+            (function() {{
+                var audio = new Audio("{audio_url}");
+                audio.play().catch(function(error) {{
+                    console.log("Autoplay blocked or failed:", error);
+                }});
+            }})();
+            </script>
         """
-        # 為了隱藏播放器但確保執行，我們不使用 display:none 有時會被瀏覽器優化掉
-        # 改用一個極小的寬高
-        st.components.v1.html(audio_html, height=0, width=0)
+        # 這裡必須賦予一個隨機的 key，否則 Streamlit 可能不會重新執行這段 JS
+        st.components.v1.html(js_code, height=0)
 
 # 側邊欄設定
 with st.sidebar:
