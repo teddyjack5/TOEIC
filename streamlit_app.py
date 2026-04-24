@@ -5,6 +5,7 @@ import random
 import requests
 import plotly.express as px
 import re
+import time
 
 # ==============================================================================
 # 1. 頁面與持久化設定
@@ -31,16 +32,23 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 # ==============================================================================
 def speak_word(text):
     if text:
-        # 使用 Web Speech API 直接控制瀏覽器發音
+        # 使用隨機數確保每次生成的 HTML 組件都是獨一無二的，避免執行延遲
+        rid = time.time()
         js_code = f"""
+            <div style="display:none;" id="audio_{rid}"></div>
             <script>
-            var msg = new SpeechSynthesisUtterance();
-            msg.text = "{text}";
-            msg.lang = "en-US";
-            msg.rate = 0.9;
-            window.speechSynthesis.speak(msg);
+            (function() {{
+                var msg = new SpeechSynthesisUtterance();
+                msg.text = "{text}";
+                msg.lang = "en-US";
+                msg.rate = 0.9;
+                // 確保語音引擎已準備好
+                window.speechSynthesis.cancel(); // 先停止之前的發音，避免累積
+                window.speechSynthesis.speak(msg);
+            }})();
             </script>
         """
+        # 賦予唯一的 key 值是 Streamlit 避免組件失效的關鍵
         st.components.v1.html(js_code, height=0)
 
 # 側邊欄設定
