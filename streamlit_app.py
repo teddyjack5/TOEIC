@@ -184,15 +184,17 @@ if mode == "開始測驗":
                 with cols[i % 2]:
                     if st.button(option, key=f"btn_{i}", use_container_width=True, disabled=st.session_state.ans_revealed):
                         progress['total_answered'] += 1
+                        st.session_state.ans_revealed = True
                         if option == q['correct_ans']:
                             progress['score'] += 1
                             st.session_state.is_correct = True
                         else:
                             st.session_state.is_correct = False
                             if not any(item['word'] == q['word'] for item in progress['wrong_answers']):
-                                progress['wrong_answers'].append({'word': q['word'], 'pos': q['pos'], 'definition': q['word'], 'mastered': False})
-                        st.session_state.ans_revealed = True
-                        #if auto_audio: speak_text(q['word']) # 自動發音
+                                progress['wrong_answers'].append({
+                                    'word': q['word'], 'pos': q['pos'],
+                                    'definition': q['word'], 'mastered': False
+                                })
                         st.rerun()
 
             # --- 回饋區 ---
