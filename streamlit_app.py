@@ -104,7 +104,7 @@ with st.sidebar:
         st.success("✅ 已重置所有學習紀錄！")
         st.rerun()
         
-     st.markdown("---")
+     st.write("---")
 
 # CSS 設定
 st.markdown(f"""
