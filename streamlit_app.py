@@ -35,7 +35,7 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 # 🔊 自動發音函數 (JavaScript 注入)
 # ==============================================================================
 def speak_text(text):
-    """macOS/iOS 友好，按鈕觸發安全版"""
+    """macOS/iOS/Windows 兼容，按鈕觸發即可"""
     if not text:
         return
 
@@ -44,27 +44,16 @@ def speak_text(text):
         st.warning("文字中沒有可發音的英文")
         return
 
-    tmp_path = None
     try:
-        # 生成暫存 MP3 檔案
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-            tmp_path = tmp_file.name
+        # 使用 BytesIO 代替暫存檔
+        audio_fp = io.BytesIO()
         tts = gTTS(text=english_only, lang='en', slow=False)
-        tts.save(tmp_path)
+        tts.write_to_fp(audio_fp)
+        audio_fp.seek(0)  # ✅ 非常重要，重置指標到開頭
 
-        # 播放音訊
-        st.audio(tmp_path, format="audio/mp3")
-
+        st.audio(audio_fp, format="audio/mp3")  # 按鈕觸發播放
     except Exception as e:
         st.error(f"發音失敗: {e}")
-
-    finally:
-        # 安全刪除檔案
-        try:
-            if tmp_path and os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except:
-            pass
 
 # 側邊欄設定
 with st.sidebar:
