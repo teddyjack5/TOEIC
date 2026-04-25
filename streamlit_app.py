@@ -204,12 +204,19 @@ if mode == "開始測驗":
                     st.error(f"❌ 不對喔！正確答案是：**{q['correct_ans']}**")
                 
                 # --- 修改後的發音按鈕區 (單字 + 例句) ---
-                c1, c2, _ = st.columns([1, 1, 3]) # 增加一欄給例句發音
+                c1, c2, _ = st.columns([1,1,3])
                 with c1:
-                    if st.button("🔊 單字"): speak_text(q['word'])
+                    play_word = st.button("🔊 單字發音")
                 with c2:
-                    if q['example']: # 有例句才顯示按鈕
-                        if st.button("📢 例句"): speak_text(q['example'])
+                    play_example = False
+                    if q['example']:
+                        play_example = st.button("📢 例句發音")
+
+                if play_word:
+                    speak_text(q['word'])
+
+                if play_example:
+                    speak_text(q['example'])
 
                 if q['point']:
                     st.markdown(f'<div class="point-box"><b>📌 出題重點：</b>{q["point"]}</div>', unsafe_allow_html=True)
