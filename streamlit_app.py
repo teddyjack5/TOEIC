@@ -35,32 +35,31 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 # 🔊 自動發音函數 (JavaScript 注入)
 # ==============================================================================
 def speak_text(text):
-    """
-    生成語音並播放，macOS/iOS 友好版本
-    """
+    """macOS/iOS 友好，按鈕觸發安全版"""
     if not text:
         return
 
-    # 只保留英文、數字與標點符號
     english_only = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\'\";:-]+', text))
     if not english_only.strip():
+        st.warning("文字中沒有可發音的英文")
         return
 
+    tmp_path = None
     try:
-        # 使用暫存檔生成 MP3
+        # 生成暫存 MP3 檔案
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-            tts = gTTS(text=english_only, lang='en', slow=False)
-            tts.save(tmp_file.name)
             tmp_path = tmp_file.name
+        tts = gTTS(text=english_only, lang='en', slow=False)
+        tts.save(tmp_path)
 
-        # 使用 Streamlit 播放音訊
+        # 播放音訊
         st.audio(tmp_path, format="audio/mp3")
 
     except Exception as e:
         st.error(f"發音失敗: {e}")
 
     finally:
-        # 清理暫存檔
+        # 安全刪除檔案
         try:
             if tmp_path and os.path.exists(tmp_path):
                 os.remove(tmp_path)
