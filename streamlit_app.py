@@ -103,8 +103,6 @@ with st.sidebar:
         st.session_state.is_correct = None
         st.success("✅ 已重置所有學習紀錄！")
         st.rerun()
-        
-     st.write("---")
 
 # CSS 設定
 st.markdown(f"""
