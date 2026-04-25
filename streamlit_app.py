@@ -35,23 +35,22 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 # 🔊 自動發音函數 (JavaScript 注入)
 # ==============================================================================
 def speak_text(text):
-    """macOS/iOS/Windows 兼容，按鈕觸發即可"""
+    """Windows/macOS/iOS 兼容，按鈕觸發播放"""
     if not text:
         return
 
+    # 過濾非英文與數字符號
     english_only = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\'\";:-]+', text))
     if not english_only.strip():
         st.warning("文字中沒有可發音的英文")
         return
 
     try:
-        # 使用 BytesIO 代替暫存檔
         audio_fp = io.BytesIO()
         tts = gTTS(text=english_only, lang='en', slow=False)
         tts.write_to_fp(audio_fp)
-        audio_fp.seek(0)  # ✅ 非常重要，重置指標到開頭
-
-        st.audio(audio_fp, format="audio/mp3")  # 按鈕觸發播放
+        audio_fp.seek(0)  # ✅ 重置指標
+        st.audio(audio_fp, format="audio/mp3")
     except Exception as e:
         st.error(f"發音失敗: {e}")
 
