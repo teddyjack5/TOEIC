@@ -45,9 +45,9 @@ def speak_text(text):
                 
             # 使用 gTTS 產生語音
             tts = gTTS(text=english_only, lang='en', slow=False)
-            
             audio_fp = io.BytesIO()
             tts.write_to_fp(audio_fp)
+            audio_fp.seek(0)
             
             # 使用 Streamlit 原生組件播放
             st.audio(audio_fp, format="audio/mp3", autoplay=True)
