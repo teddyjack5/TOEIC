@@ -9,6 +9,7 @@ import urllib.parse
 import time
 from gtts import gTTS
 import io
+import tempfile
 
 # ==============================================================================
 # 1. 頁面與持久化設定
@@ -34,25 +35,37 @@ if 'is_correct' not in st.session_state: st.session_state.is_correct = None
 # 🔊 自動發音函數 (JavaScript 注入)
 # ==============================================================================
 def speak_text(text):
-    if text:
-        try:
-            # 【關鍵優化】使用正則表達式只保留英文、數字與標點符號
-            # 這個 pattern 會過濾掉所有中文字（Unicode 範圍外的字元）
-            english_only = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\'\";:-]+', text))
-            
-            if not english_only.strip():
-                return # 如果過濾完沒東西就不發音
-                
-            # 使用 gTTS 產生語音
+    """
+    生成語音並播放，macOS/iOS 友好版本
+    """
+    if not text:
+        return
+
+    # 只保留英文、數字與標點符號
+    english_only = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\'\";:-]+', text))
+    if not english_only.strip():
+        return
+
+    try:
+        # 使用暫存檔生成 MP3
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
             tts = gTTS(text=english_only, lang='en', slow=False)
-            audio_fp = io.BytesIO()
-            tts.write_to_fp(audio_fp)
-            audio_fp.seek(0)
-            
-            # 使用 Streamlit 原生組件播放
-            st.audio(audio_fp, format="audio/mp3", autoplay=True)
-        except Exception as e:
-            st.error(f"發音失敗: {e}")
+            tts.save(tmp_file.name)
+            tmp_path = tmp_file.name
+
+        # 使用 Streamlit 播放音訊
+        st.audio(tmp_path, format="audio/mp3")
+
+    except Exception as e:
+        st.error(f"發音失敗: {e}")
+
+    finally:
+        # 清理暫存檔
+        try:
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
 
 # 側邊欄設定
 with st.sidebar:
