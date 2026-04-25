@@ -92,7 +92,6 @@ with st.sidebar:
                           paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("---")
     st.header("📌 進度控制")
     if st.button("🔄 重置學習紀錄"):
         progress['score'] = 0
@@ -104,6 +103,7 @@ with st.sidebar:
         st.session_state.is_correct = None
         st.success("✅ 已重置所有學習紀錄！")
         st.rerun()
+     st.markdown("---")
 
 # CSS 設定
 st.markdown(f"""
