@@ -231,19 +231,38 @@ if mode == "開始測驗":
                     st.rerun()
 
         if st.session_state.answered:
-            if st.session_state.last_result: st.success("🎯 Correct!")
-            else: st.error(f"❌ Wrong! Answer: {q['correct_ans']}")
+            if st.session_state.last_result: 
+                st.success("🎯 Correct!")
+            else: 
+                st.error(f"❌ Wrong! Answer: {q['correct_ans']}")
 
             with st.expander("🔍 查看解析與發音", expanded=True):
                 vcol1, vcol2 = st.columns(2)
-                with vcol1:
-                    if st.button("🔊 單字發音", key=f"v_{q['id']}"): speak(q['word'])
-                with vcol2:
-                    if q['example'] and q['example'] != 'nan':
-                        if st.button("📢 例句發音", key=f"e_{q['id']}"): speak(q['example'])
                 
-                if q['point'] and q['point'] != 'nan': st.info(f"📌 重點：{q['point']}")
-                if q['example'] and q['example'] != 'nan': st.write(f"💡 原例句：{q['example']}")
+                # 取得乾淨的內容進行判斷
+                example_text = str(q.get('example', ''))
+                has_example = example_text.lower() != 'nan' and example_text.strip() != ""
+
+                with vcol1:
+                    # 使用隨機數或時間戳記確保 key 不重複
+                    if st.button("🔊 單字發音", key=f"v_{q['id']}_{datetime.now().strftime('%M%S')}"): 
+                        speak(q['word'])
+                
+                with vcol2:
+                    if has_example:
+                        # 例句發音按鈕
+                        if st.button("📢 例句發音", key=f"e_{q['id']}_{datetime.now().strftime('%M%S')}"): 
+                            speak(example_text)
+                    else:
+                        st.write("🙌 此單字暫無例句")
+                
+                # 顯示重點與例句
+                point_text = str(q.get('point', ''))
+                if point_text.lower() != 'nan' and point_text.strip() != "":
+                    st.info(f"📌 重點：{point_text}")
+                
+                if has_example:
+                    st.write(f"💡 原例句：{example_text}")
             
             if st.button("➡️ 下一題", type="primary", use_container_width=True):
                 st.session_state.q = None
