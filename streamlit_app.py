@@ -247,13 +247,13 @@ if mode == "開始測驗":
                 with vcol1:
                     # 使用穩定且唯一的 Key (題目ID + 模式名稱)
                     if st.button("🔊 單字發音", key=f"btn_v_{q['id']}_{quiz_mode}"): 
-                        speak(word_text)
+                        speak_html(word_text)
                 
                 with vcol2:
                     if has_example:
                         # 使用穩定且唯一的 Key
                         if st.button("📢 例句發音", key=f"btn_e_{q['id']}_{quiz_mode}"): 
-                            speak(example_text)
+                            speak_html(example_text)
                     else:
                         st.write("🙌 此單字暫無例句")
                 
