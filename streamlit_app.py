@@ -8,6 +8,7 @@ import os
 import requests
 import base64
 import time
+import uuid
 from gtts import gTTS
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
@@ -159,18 +160,20 @@ def speak_html(text):
             
             audio_base64 = base64.b64encode(audio_bytes).decode()
             
-            # 2. 核心修正：
-            # (A) 移除 Base64 後面的 #t={ts}，保持數據純淨
-            # (B) 在 HTML 中加入一個隨機註解 # 這會強迫瀏覽器認為這是「全新的 HTML 內容」，進而觸發 autoplay
-            ts = time.time()
+            # 2. 核心修正：使用隨機產生的 ID (UUID)
+            # 讓每次產出的 HTML 結構在瀏覽器眼中都是「全新創立」的元件
+            unique_id = str(uuid.uuid4())[:8]
+            
             audio_tag = f'''
-                <audio autoplay>
-                    <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
-                </audio>
+                <div id="audio-container-{unique_id}">
+                    <audio autoplay>
+                        <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
+                    </audio>
+                    </div>
             '''
+            # 使用 empty 容器或直接 markdown 渲染
             st.markdown(audio_tag, unsafe_allow_html=True)
             
-            # 視需要清理暫存檔
             os.unlink(f.name)
     except Exception as e:
         st.error(f"發音失敗: {e}")
