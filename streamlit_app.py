@@ -185,7 +185,7 @@ if mode == "開始測驗":
         """, unsafe_allow_html=True)
         st.write("")
 
-cols = st.columns(2)
+        cols = st.columns(2)
         for i, opt in enumerate(q['options']):
             with cols[i % 2]:
                 # 關鍵點：使用唯一的 key，並在點擊時進行類型轉換
