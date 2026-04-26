@@ -161,8 +161,8 @@ with st.sidebar:
     # --- 這裡最重要！補上 mode 定義 ---
     mode = st.radio("🚀 功能切換", ["開始測驗", "學習進度分析", "新增單字庫"])
     
-    if st.button("🔄 同步雲端單字庫"):
-        if sync_data(): st.success("同步成功！")
+    if st.button("🔄 更新雲端單字庫"):
+        if sync_data(): st.success("更新成功！")
     
     if st.button("🗑️ 重置我的紀錄"):
         conn = sqlite3.connect(DB_NAME)
@@ -184,7 +184,7 @@ else:
 st.title(f"📖 {user_id if user_id else '訪客'} 的多益訓練營")
 
 if not user_id.strip():
-    st.warning("👋 歡迎！請先在左側控制面板輸入您的「使用者識別 ID」。")
+    st.warning("👋 歡迎！請先在左側控制面板輸入您的「使用者識別 ID」，並且先點左下方更新單字庫。")
     st.stop()
 
 # --- 模式 1：開始測驗 ---
