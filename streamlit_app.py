@@ -32,6 +32,37 @@ def init_db():
 
 init_db()
 
+def sync_data():
+    try:
+        # 建立與 Google Sheets 的連線
+        conn_gs = st.connection("gsheets", type=GSheetsConnection)
+        # 讀取試算表資料
+        df_gs = conn_gs.read()
+        
+        if df_gs is None or df_gs.empty:
+            st.error("雲端試算表是空的，請檢查內容。")
+            return False
+            
+        conn_db = sqlite3.connect(DB_NAME)
+        
+        # 逐筆寫入 SQLite 資料庫
+        for _, row in df_gs.iterrows():
+            try:
+                conn_db.execute('''INSERT OR REPLACE INTO vocabs (word, pos, definition, example, point)
+                                   VALUES (?, ?, ?, ?, ?)''', 
+                                (str(row['word']), str(row['pos']), str(row['definition']), 
+                                 str(row['example']), str(row['point'])))
+            except KeyError as e:
+                st.error(f"試算表欄位名稱錯誤：找不到 {e}。請確保 Google Sheet 第一列包含 word, pos, definition, example, point。")
+                conn_db.close()
+                return False
+                
+        conn_db.commit()
+        conn_db.close()
+        return True
+    except Exception as e:
+        st.error(f"同步失敗，錯誤訊息: {e}")
+        return False
 # ==============================================================================
 # 2. 資料庫操作 (更新進度)
 # ==============================================================================
