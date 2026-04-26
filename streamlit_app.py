@@ -109,9 +109,17 @@ def get_weighted_question(user_id, mode_type):
         pattern = re.compile(re.escape(target['word']), re.IGNORECASE)
         cloze_text = pattern.sub(" _______ ", str(target['example']))
 
-    return {'id': int(target['id']), 'word': str(target['word']), 'pos': str(target['pos']),
-            'correct_ans': correct_ans, 'options': options, 'example': str(target['example']), 
-            'point': str(target['point']), 'cloze_text': cloze_text}
+    return {
+        'id': int(target['id']), 
+        'word': str(target['word']), 
+        'pos': str(target['pos']),
+        'definition': str(target['definition']), # 👈 關鍵：加上這一行
+        'correct_ans': correct_ans, 
+        'options': options, 
+        'example': str(target['example']), 
+        'point': str(target['point']), 
+        'cloze_text': cloze_text
+    }
 
 def speak(text):
     if not text or str(text) == 'nan': return
