@@ -145,7 +145,7 @@ def speak(text):
     tts = gTTS(text=clean_text, lang='en')
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
         tts.save(f.name)
-        st.audio(f.name, format="audio/mp3", autoplay=True)
+        st.audio(f.name, format="audio/mp3", autoplay=False)
 
 # ==============================================================================
 # 4. 主程式介面
