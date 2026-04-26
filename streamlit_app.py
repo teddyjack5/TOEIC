@@ -144,11 +144,8 @@ def speak_html(text):
     if not text or str(text).lower() == 'nan':
         return
     
-    # --- 關鍵過濾邏輯 ---
-    # 只保留英文、數字、常見標點符號 (.,?!)，其餘（如中文）皆替換為空格
+    # 1. 濾掉中文，只留英文與標點
     clean_text = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\']+', text))
-    
-    # 如果過濾後是空的，就不執行
     if not clean_text.strip():
         return
 
@@ -157,9 +154,17 @@ def speak_html(text):
         tts.save(f.name)
         with open(f.name, "rb") as audio_file:
             audio_bytes = audio_file.read()
+        
         audio_base64 = base64.b64encode(audio_bytes).decode()
-        # 設定為 autoplay 讓它按下去立刻發聲
-        audio_tag = f'<audio src="data:audio/mp3;base64,{audio_base64}" autoplay></audio>'
+        
+        # 2. 關鍵修正：在 data URL 後面加上 #t={timestamp}
+        # 這樣瀏覽器會認為這是一個新的資源，進而觸發重新播放
+        ts = time.time()
+        audio_tag = f'''
+            <audio autoplay key="{ts}">
+                <source src="data:audio/mp3;base64,{audio_base64}#t={ts}" type="audio/mp3">
+            </audio>
+        '''
         st.markdown(audio_tag, unsafe_allow_html=True)
 
 # ==============================================================================
