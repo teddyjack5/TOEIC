@@ -66,60 +66,65 @@ def get_weighted_question(user_id, mode_type):
         LEFT JOIN user_progress p ON v.id = p.vocab_id AND p.user_id = ?
     """
     df = pd.read_sql_query(query, conn, params=(user_id,))
-    conn.close()
     
-    if df.empty: return None
+    if df.empty: 
+        conn.close()
+        return None
 
     # 高手加權演算法
-    # 權重 = 1 (基礎) + 錯誤次數加成 - 連續對次數扣減
     df['weight'] = 1 + (df['wrongs'] * 5) - (df['streak'] * 1.5)
-    df['weight'] = df['weight'].clip(lower=0.1) # 確保至少有極小機率出現
+    df['weight'] = df['weight'].clip(lower=0.1)
     
-    # 填空模式過濾
-    if mode_type == "填空挑戰 (Cloze)":
+    # 填空模式過濾 (確保有例句)
+    if "Cloze" in mode_type:
         df = df[df['example'].str.len() > 5]
+        if df.empty: # 如果沒有單字有例句，退回普通模式
+            df = pd.read_sql_query(query, conn, params=(user_id,))
 
     target = df.sample(n=1, weights='weight').iloc[0]
     
-    # 準備選項 (隨機從庫中抓 3 個非正確答案)
-    conn = sqlite3.connect(DB_NAME)
-    distractors_query = "SELECT definition FROM vocabs WHERE word != ? ORDER BY RANDOM() LIMIT 3"
-    if mode_type == "填空挑戰 (Cloze)":
-        distractors_query = "SELECT word FROM vocabs WHERE word != ? ORDER BY RANDOM() LIMIT 3"
+    # --- 關鍵修正區：抓取誘答選項 (Distractors) ---
+    # 不論模式，我們都先抓出正確答案的「欄位值」
+    is_standard = "標準選擇題" in mode_type
+    target_col = 'definition' if is_standard else 'word'
+    correct_ans = str(target[target_col])
+
+    # 改用更穩定的方式抓取其他選項
+    dist_col = 'definition' if is_standard else 'word'
+    dist_query = f"SELECT {dist_col} FROM vocabs WHERE word != ? ORDER BY RANDOM() LIMIT 3"
     
-    distractors = pd.read_sql_query(distractors_query, conn, params=(target['word'],))['definition' if mode_type == "標準選擇題" else 'word'].tolist()
+    try:
+        dist_df = pd.read_sql_query(dist_query, conn, params=(target['word'],))
+        # 直接取第一欄的所有值，避免字串比對 Key 的問題
+        distractors = dist_df.iloc[:, 0].astype(str).tolist()
+    except Exception as e:
+        distractors = []
+
     conn.close()
     
-    options = distractors + [target['definition' if mode_type == "標準選擇題" else 'word']]
+    # 確保至少有選項，即使庫太小也不會崩潰
+    while len(distractors) < 3:
+        distractors.append(" (候選選項不足) ")
+
+    options = distractors + [correct_ans]
     random.shuffle(options)
     
     cloze_text = ""
-    if mode_type == "填空挑戰 (Cloze)":
+    if "Cloze" in mode_type and target['example']:
+        # 忽略大小寫的替換
         pattern = re.compile(re.escape(target['word']), re.IGNORECASE)
-        cloze_text = pattern.sub(" _______ ", target['example'])
+        cloze_text = pattern.sub(" _______ ", str(target['example']))
 
     return {
-        'id': target['id'], 'word': target['word'], 'pos': target['pos'],
-        'correct_ans': target['definition' if mode_type == "標準選擇題" else 'word'],
-        'options': options, 'example': target['example'], 'point': target['point'],
+        'id': int(target['id']), 
+        'word': str(target['word']), 
+        'pos': str(target['pos']),
+        'correct_ans': correct_ans,
+        'options': options, 
+        'example': str(target['example']), 
+        'point': str(target['point']),
         'cloze_text': cloze_text
     }
-
-def update_progress(user_id, vocab_id, is_correct):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    if is_correct:
-        c.execute('''INSERT INTO user_progress (user_id, vocab_id, correct_streak, last_tested)
-                     VALUES (?, ?, 1, CURRENT_TIMESTAMP)
-                     ON CONFLICT(user_id, vocab_id) DO UPDATE SET 
-                     correct_streak = correct_streak + 1, last_tested = CURRENT_TIMESTAMP''')
-    else:
-        c.execute('''INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
-                     VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
-                     ON CONFLICT(user_id, vocab_id) DO UPDATE SET 
-                     wrong_count = wrong_count + 1, correct_streak = 0, last_tested = CURRENT_TIMESTAMP''')
-    conn.commit()
-    conn.close()
 
 # ==============================================================================
 # 4. UI 輔助函數
