@@ -5,7 +5,7 @@ import random
 import re
 import tempfile
 import os
-import requests  # 補上這個用於新增單字
+import requests
 from gtts import gTTS
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
@@ -33,7 +33,7 @@ def init_db():
 init_db()
 
 # ==============================================================================
-# 2. 資料庫操作 (更新進度) - 補回缺失的函式
+# 2. 資料庫操作 (更新進度)
 # ==============================================================================
 def update_progress(user_id, vocab_id, is_correct):
     conn = sqlite3.connect(DB_NAME, timeout=10)
@@ -54,7 +54,7 @@ def update_progress(user_id, vocab_id, is_correct):
         conn.close()
 
 # ==============================================================================
-# 3. 資料同步與核心邏輯
+# 3. 核心邏輯
 # ==============================================================================
 def sync_data():
     try:
@@ -79,12 +79,15 @@ def get_weighted_question(user_id, mode_type):
         conn.close()
         return None
 
+    # 加權算法
     df['weight'] = 1 + (df['wrongs'] * 5) - (df['streak'] * 1.5)
     df['weight'] = df['weight'].clip(lower=0.1)
     
+    # 填空模式過濾
     if "Cloze" in mode_type:
-        df = df[df['example'].str.len() > 5]
-        if df.empty: df = pd.read_sql_query(query, conn, params=(user_id,))
+        cloze_df = df[df['example'].str.len() > 5]
+        if not cloze_df.empty:
+            df = cloze_df
 
     target = df.sample(n=1, weights='weight').iloc[0]
     is_standard = "標準選擇題" in mode_type
@@ -100,8 +103,9 @@ def get_weighted_question(user_id, mode_type):
     options = distractors + [correct_ans]
     random.shuffle(options)
     
+    # 處理底線邏輯
     cloze_text = ""
-    if "Cloze" in mode_type and target['example']:
+    if target['example'] and str(target['example']) != 'nan':
         pattern = re.compile(re.escape(target['word']), re.IGNORECASE)
         cloze_text = pattern.sub(" _______ ", str(target['example']))
 
@@ -128,6 +132,9 @@ with st.sidebar:
     theme_mode = st.radio("主題模式", ["深色", "淺色"], horizontal=True)
     quiz_mode = st.selectbox("📝 測驗題型", ["標準選擇題", "填空挑戰 (Cloze)"], key="main_quiz_mode")
     
+    # --- 這裡最重要！補上 mode 定義 ---
+    mode = st.radio("🚀 功能切換", ["開始測驗", "新增單字庫"])
+    
     if st.button("🔄 同步雲端單字庫"):
         if sync_data(): st.success("同步成功！")
     
@@ -138,38 +145,15 @@ with st.sidebar:
         conn.close()
         st.rerun()
 
-# 注入簡單主題 CSS
+# 注入 CSS
 if theme_mode == "深色":
-    st.markdown("""
-        <style>
-        /* 1. 全域背景與文字 */
-        .stApp { 
-            background-color: #0E1117; 
-            color: white; 
-        }
-        
-        /* 2. 強制修改所有按鈕的樣式 (解決選項看不見的問題) */
-        div.stButton > button {
-            background-color: #262730 !important; /* 深灰色背景 */
-            color: #FFFFFF !important;           /* 純白文字 */
-            border: 1px solid #4B4B4B !important; /* 灰色邊框 */
-        }
-        
-        /* 3. 答題後的正確/錯誤訊息文字顏色優化 */
-        .stSuccess, .stError {
-            color: white !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    st.markdown("""<style>
+        .stApp { background-color: #0E1117; color: white; }
+        div.stButton > button { background-color: #262730 !important; color: white !important; border: 1px solid #4B4B4B !important; }
+        .stSuccess, .stError { color: white !important; }
+        </style>""", unsafe_allow_html=True)
 else:
-    # 淺色模式維持預設，或稍微優化
-    st.markdown("""
-        <style>
-        div.stButton > button {
-            border: 1px solid #DDE4ED !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    st.markdown("<style>div.stButton > button { border: 1px solid #DDE4ED !important; }</style>", unsafe_allow_html=True)
 
 st.title(f"📖 {user_id if user_id else '訪客'} 的多益訓練營")
 
@@ -189,20 +173,16 @@ if mode == "開始測驗":
 
     q = st.session_state.q
     if q:
-        # 決定要顯示的文字：如果是填空模式就顯示 cloze_text，否則顯示單字
-        display_text = q['cloze_text'] if "Cloze" in quiz_mode else q['word']
-        
-        # 如果是填空模式但 cloze_text 竟然是空的，強制補回單字避免畫面空白
-        if not display_text or display_text.strip() == "":
-            display_text = q['word']
+        # 顯示文字邏輯：填空模式顯示底線文字，標準模式顯示單字
+        is_cloze = "Cloze" in quiz_mode
+        display_text = q['cloze_text'] if (is_cloze and q['cloze_text']) else q['word']
 
         st.markdown(f"""
-            <div style="background-color:#1E2E44; padding:30px; border-radius:15px; text-align:center;">
-                <h1 style="color:white;">{display_text}</h1>
+            <div style="background-color:#1E2E44; padding:30px; border-radius:15px; text-align:center; margin-bottom:20px;">
+                <h1 style="color:white; font-size: 40px;">{display_text}</h1>
                 <p style="color:#FF4B4B;">({q['pos']})</p>
             </div>
         """, unsafe_allow_html=True)
-        st.write("")
 
         cols = st.columns(2)
         for i, opt in enumerate(q['options']):
@@ -223,11 +203,11 @@ if mode == "開始測驗":
                 with vcol1:
                     if st.button("🔊 單字發音", key=f"v_{q['id']}"): speak(q['word'])
                 with vcol2:
-                    if q['example'] != 'nan':
+                    if q['example'] and q['example'] != 'nan':
                         if st.button("📢 例句發音", key=f"e_{q['id']}"): speak(q['example'])
                 
-                if q['point'] != 'nan': st.info(f"📌 重點：{q['point']}")
-                if q['example'] != 'nan': st.write(f"💡 例句：{q['example']}")
+                if q['point'] and q['point'] != 'nan': st.info(f"📌 重點：{q['point']}")
+                if q['example'] and q['example'] != 'nan': st.write(f"💡 原例句：{q['example']}")
             
             if st.button("➡️ 下一題", type="primary", use_container_width=True):
                 st.session_state.q = None
