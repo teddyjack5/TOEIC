@@ -189,9 +189,19 @@ if mode == "開始測驗":
 
     q = st.session_state.q
     if q:
-        st.markdown(f"""<div style="background-color:#1E2E44; padding:30px; border-radius:15px; text-align:center;">
-                        <h1 style="color:white;">{q['word'] if "標準" in quiz_mode else q['cloze_text']}</h1>
-                        <p style="color:#FF4B4B;">({q['pos']})</p></div>""", unsafe_allow_html=True)
+        # 決定要顯示的文字：如果是填空模式就顯示 cloze_text，否則顯示單字
+        display_text = q['cloze_text'] if "Cloze" in quiz_mode else q['word']
+        
+        # 如果是填空模式但 cloze_text 竟然是空的，強制補回單字避免畫面空白
+        if not display_text or display_text.strip() == "":
+            display_text = q['word']
+
+        st.markdown(f"""
+            <div style="background-color:#1E2E44; padding:30px; border-radius:15px; text-align:center;">
+                <h1 style="color:white;">{display_text}</h1>
+                <p style="color:#FF4B4B;">({q['pos']})</p>
+            </div>
+        """, unsafe_allow_html=True)
         st.write("")
 
         cols = st.columns(2)
