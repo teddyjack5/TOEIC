@@ -176,6 +176,8 @@ if mode == "開始測驗":
         # 顯示文字邏輯：填空模式顯示底線文字，標準模式顯示單字
         is_cloze = "Cloze" in quiz_mode
         display_text = q['cloze_text'] if (is_cloze and q['cloze_text']) else q['word']
+    else :
+        display_text = q['defintion']
 
         st.markdown(f"""
             <div style="background-color:#1E2E44; padding:30px; border-radius:15px; text-align:center; margin-bottom:20px;">
