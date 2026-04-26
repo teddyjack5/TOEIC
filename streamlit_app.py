@@ -176,6 +176,7 @@ if mode == "開始測驗":
     if q:
         # (這裡放原本的測驗顯示邏輯，包含 st.markdown 題目卡片、選項按鈕等)
         st.markdown(f'<div class="quiz-container"><h1>{q["word"] if quiz_mode == "標準選擇題" else q["cloze_text"]}</h1></div>', unsafe_allow_html=True)
+        st.write(st.session_state.q)
         
         # ... (選項按鈕與回饋邏輯)
         # 答題後的「下一題」按鈕記得要設 st.session_state.q = None
