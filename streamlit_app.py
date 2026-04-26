@@ -1,259 +1,212 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import sqlite3
 import random
-import requests
-import plotly.express as px
 import re
-import urllib.parse
-import time
-from gtts import gTTS
-import io
 import tempfile
+import os
+from gtts import gTTS
+from streamlit_gsheets import GSheetsConnection
+from datetime import datetime
 
 # ==============================================================================
-# 1. 頁面與持久化設定
+# 1. 初始化與資料庫設定
 # ==============================================================================
-st.set_page_config(page_title="小鐵的多益單字練習", page_icon="📖", layout="wide")
+st.set_page_config(page_title="小鐵的多益 Pro 學習系統", page_icon="🚀", layout="wide")
 
-@st.cache_resource
-def get_global_progress():
+DB_NAME = "toeic_pro.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    # 單字主表 (從 GSheets 同步過來)
+    c.execute('''CREATE TABLE IF NOT EXISTS vocabs 
+                 (id INTEGER PRIMARY KEY, word TEXT UNIQUE, pos TEXT, 
+                  definition TEXT, example TEXT, point TEXT)''')
+    # 使用者進度表
+    c.execute('''CREATE TABLE IF NOT EXISTS user_progress 
+                 (user_id TEXT, vocab_id INTEGER, wrong_count INTEGER DEFAULT 0, 
+                  correct_streak INTEGER DEFAULT 0, last_tested TIMESTAMP,
+                  PRIMARY KEY (user_id, vocab_id))''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# ==============================================================================
+# 2. 資料同步 (GSheets -> SQLite)
+# ==============================================================================
+def sync_data():
+    try:
+        conn_gs = st.connection("gsheets", type=GSheetsConnection)
+        df_gs = conn_gs.read()
+        
+        conn_db = sqlite3.connect(DB_NAME)
+        # 僅更新單字庫，不影響進度
+        for _, row in df_gs.iterrows():
+            conn_db.execute('''
+                INSERT OR REPLACE INTO vocabs (word, pos, definition, example, point)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (row['word'], row['pos'], row['definition'], row['example'], row['point']))
+        conn_db.commit()
+        conn_db.close()
+        return True
+    except Exception as e:
+        st.error(f"同步失敗: {e}")
+        return False
+
+# ==============================================================================
+# 3. 核心邏輯：加權抽題與進度更新
+# ==============================================================================
+def get_weighted_question(user_id, mode_type):
+    conn = sqlite3.connect(DB_NAME)
+    query = """
+        SELECT v.*, IFNULL(p.wrong_count, 0) as wrongs, IFNULL(p.correct_streak, 0) as streak
+        FROM vocabs v
+        LEFT JOIN user_progress p ON v.id = p.vocab_id AND p.user_id = ?
+    """
+    df = pd.read_sql_query(query, conn, params=(user_id,))
+    conn.close()
+    
+    if df.empty: return None
+
+    # 高手加權演算法
+    # 權重 = 1 (基礎) + 錯誤次數加成 - 連續對次數扣減
+    df['weight'] = 1 + (df['wrongs'] * 5) - (df['streak'] * 1.5)
+    df['weight'] = df['weight'].clip(lower=0.1) # 確保至少有極小機率出現
+    
+    # 填空模式過濾
+    if mode_type == "填空挑戰 (Cloze)":
+        df = df[df['example'].str.len() > 5]
+
+    target = df.sample(n=1, weights='weight').iloc[0]
+    
+    # 準備選項 (隨機從庫中抓 3 個非正確答案)
+    conn = sqlite3.connect(DB_NAME)
+    distractors_query = "SELECT definition FROM vocabs WHERE word != ? ORDER BY RANDOM() LIMIT 3"
+    if mode_type == "填空挑戰 (Cloze)":
+        distractors_query = "SELECT word FROM vocabs WHERE word != ? ORDER BY RANDOM() LIMIT 3"
+    
+    distractors = pd.read_sql_query(distractors_query, conn, params=(target['word'],))['definition' if mode_type == "標準選擇題" else 'word'].tolist()
+    conn.close()
+    
+    options = distractors + [target['definition' if mode_type == "標準選擇題" else 'word']]
+    random.shuffle(options)
+    
+    cloze_text = ""
+    if mode_type == "填空挑戰 (Cloze)":
+        pattern = re.compile(re.escape(target['word']), re.IGNORECASE)
+        cloze_text = pattern.sub(" _______ ", target['example'])
+
     return {
-        'score': 0,
-        'total_answered': 0,
-        'wrong_answers': [],
-        'mastery_ids': set()
+        'id': target['id'], 'word': target['word'], 'pos': target['pos'],
+        'correct_ans': target['definition' if mode_type == "標準選擇題" else 'word'],
+        'options': options, 'example': target['example'], 'point': target['point'],
+        'cloze_text': cloze_text
     }
 
-progress = get_global_progress()
-
-if 'quiz_data' not in st.session_state: st.session_state.quiz_data = None
-if 'ans_revealed' not in st.session_state: st.session_state.ans_revealed = False
-if 'is_correct' not in st.session_state: st.session_state.is_correct = None
-
-# ==============================================================================
-# 🔊 自動發音函數 (JavaScript 注入)
-# ==============================================================================
-def speak_text(text):
-    if not text:
-        return
-    english_only = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\'\";:-]+', text))
-    if not english_only.strip():
-        st.warning("文字中沒有可發音的英文")
-        return
-
-    tmp_path = None
-    try:
-        # 生成暫存 MP3
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-            tmp_path = tmp_file.name
-        tts = gTTS(text=english_only, lang='en', slow=False)
-        tts.save(tmp_path)
-
-        # 播放音訊
-        st.audio(tmp_path, format="audio/mp3")
-
-    except Exception as e:
-        st.error(f"發音失敗: {e}")
-    finally:
-        # 安全刪除檔案
-        try:
-            if tmp_path and os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except:
-            pass
-
-# 側邊欄設定
-with st.sidebar:
-    st.header("🎨 介面設定")
-    theme_mode = st.selectbox("切換主題模式", ["深色模式 (Dark)", "淺色模式 (Light)"])
-    quiz_mode_type = st.selectbox("📝 測驗題型", ["標準選擇題", "填空挑戰 (Cloze)"])
-    auto_audio = st.checkbox("🔊 答題後自動發音", value=True)
-    
-    if theme_mode == "深色模式 (Dark)":
-        main_bg, card_bg, text_color = "#0E1117", "#1E1E1E", "#FFFFFF"
-        quiz_box_bg = "#1A2E44"
-        ex_bg = "#262730"
+def update_progress(user_id, vocab_id, is_correct):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    if is_correct:
+        c.execute('''INSERT INTO user_progress (user_id, vocab_id, correct_streak, last_tested)
+                     VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+                     ON CONFLICT(user_id, vocab_id) DO UPDATE SET 
+                     correct_streak = correct_streak + 1, last_tested = CURRENT_TIMESTAMP''')
     else:
-        main_bg, card_bg, text_color = "#FFFFFF", "#F0F2F6", "#1F1F1F"
-        quiz_box_bg = "#E1F5FE"
-        ex_bg = "#F8F9FB"
+        c.execute('''INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
+                     VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
+                     ON CONFLICT(user_id, vocab_id) DO UPDATE SET 
+                     wrong_count = wrong_count + 1, correct_streak = 0, last_tested = CURRENT_TIMESTAMP''')
+    conn.commit()
+    conn.close()
 
-    st.write("---")
-    st.header("📈 學習統計")
-    if progress['total_answered'] > 0:
-        acc_data = pd.DataFrame({
-            "結果": ["正確", "錯誤"],
-            "題數": [progress['score'], progress['total_answered'] - progress['score']]
-        })
-        fig = px.pie(acc_data, values='題數', names='結果', 
-                     color_discrete_sequence=['#28a745', '#dc3545'], hole=0.5)
-        fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=200, showlegend=False,
-                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
+# ==============================================================================
+# 4. UI 輔助函數
+# ==============================================================================
+def speak(text):
+    if not text: return
+    clean_text = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\']+', text))
+    tts = gTTS(text=clean_text, lang='en')
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+        tts.save(f.name)
+        st.audio(f.name, format="audio/mp3", autoplay=True)
 
-    st.header("📌 進度控制")
-    if st.button("🔄 重置學習紀錄"):
-        progress['score'] = 0
-        progress['total_answered'] = 0
-        progress['wrong_answers'] = []
-        progress['mastery_ids'] = set()
-        st.session_state.quiz_data = None
-        st.session_state.ans_revealed = False
-        st.session_state.is_correct = None
-        st.success("✅ 已重置所有學習紀錄！")
+# ==============================================================================
+# 5. 主程式介面
+# ==============================================================================
+with st.sidebar:
+    st.title("⚙️ 控制面板")
+    user_id = st.text_input("👤 使用者識別 (ID)", value="小鐵")
+    quiz_mode = st.selectbox("📝 測驗題型", ["標準選擇題", "填空挑戰 (Cloze)"])
+    
+    if st.button("🔄 同步雲端單字庫"):
+        if sync_data(): st.success("同步成功！")
+    
+    if st.button("🗑️ 重置我的紀錄"):
+        conn = sqlite3.connect(DB_NAME)
+        conn.execute("DELETE FROM user_progress WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
         st.rerun()
 
-# CSS 設定
-st.markdown(f"""
-    <style>
-    .stApp {{ background-color: {main_bg} !important; color: {text_color} !important; }}
-    .stButton>button {{ border-radius: 12px; height: 3.5em; border: 1px solid #444; background-color: {card_bg} !important; color: {text_color} !important; font-weight: bold; }}
-    .quiz-container {{ background-color: {quiz_box_bg}; padding: 40px 20px; border-radius: 15px; text-align: center; margin-bottom: 25px; border: 1px solid #444; }}
-    .quiz-word {{ font-size: 48px !important; font-weight: 800 !important; color: {text_color}; margin-bottom: 5px; }}
-    .cloze-sentence {{ font-size: 24px !important; color: {text_color}; line-height: 1.5; }}
-    .quiz-pos {{ font-size: 20px; color: #FF4B4B; font-weight: bold; }}
-    .example-box {{ background-color: {ex_bg}; border-left: 5px solid #28a745; padding: 15px 20px; margin: 15px 0; border-radius: 8px; font-style: italic; color: {text_color}; line-height: 1.6; }}
-    .point-box {{ background-color: #FFF3E0; border-left: 5px solid #FF9800; padding: 12px 20px; margin: 10px 0; border-radius: 8px; color: #E65100; font-weight: 500; }}
-    </style>
-""", unsafe_allow_html=True)
+# 狀態初始化
+if 'q' not in st.session_state: st.session_state.q = None
+if 'answered' not in st.session_state: st.session_state.answered = False
 
-# ==============================================================================
-# 2. 核心函式
-# ==============================================================================
-def generate_question(source_df, target_state_key='quiz_data'):
-    if source_df is None or source_df.empty: return
-    try:
-        # 確保填空題模式時，只抽有例句的單字
-        if quiz_mode_type == "填空挑戰 (Cloze)":
-            source_df = source_df[source_df['example'].notna() & (source_df['example'] != "")]
+st.title(f"📖 {user_id} 的多益訓練營")
+
+# 抽題邏輯
+if st.session_state.q is None:
+    st.session_state.q = get_weighted_question(user_id, quiz_mode)
+    st.session_state.answered = False
+
+q = st.session_state.q
+
+if q:
+    # 顯示題目卡片
+    st.markdown(f"""
+        <div style="background-color:#1E2E44; padding:30px; border-radius:15px; text-align:center; border:1px solid #4A90E2;">
+            <h1 style="color:white; margin:0;">{q['word'] if quiz_mode == "標準選擇題" else q['cloze_text']}</h1>
+            <p style="color:#FF4B4B; font-weight:bold;">({q['pos']})</p>
+        </div>
+    """, unsafe_allow_html=True)
+    st.write("")
+
+    # 選項按鈕
+    cols = st.columns(2)
+    for i, opt in enumerate(q['options']):
+        with cols[i % 2]:
+            if st.button(opt, key=f"opt_{i}", use_container_width=True, disabled=st.session_state.answered):
+                st.session_state.answered = True
+                is_correct = (opt == q['correct_ans'])
+                update_progress(user_id, q['id'], is_correct)
+                st.session_state.last_result = is_correct
+                st.rerun()
+
+    # 答題後回饋
+    if st.session_state.answered:
+        if st.session_state.last_result:
+            st.success("🎯 Correct!")
+        else:
+            st.error(f"❌ Wrong! Answer: {q['correct_ans']}")
         
-        target = source_df.sample(n=1).iloc[0]
-        full_pool = st.session_state.get('full_df', pd.DataFrame())
-        
-        # 準備選項
-        if quiz_mode_type == "標準選擇題":
-            distractors = full_pool[full_pool['definition'] != target['definition']].sample(n=min(3, len(full_pool)-1))['definition'].tolist()
-            correct_ans = target['definition']
-        else: # 填空挑戰：選項是「單字」本身
-            distractors = full_pool[full_pool['word'] != target['word']].sample(n=min(3, len(full_pool)-1))['word'].tolist()
-            correct_ans = target['word']
-
-        options = distractors + [correct_ans]
-        random.shuffle(options)
-        
-        ex_val = str(target['example']) if 'example' in target and pd.notna(target['example']) else ""
-        pt_val = str(target['point']) if 'point' in target and pd.notna(target['point']) else ""
-        
-        # 處理填空題題目文字
-        cloze_text = ""
-        if quiz_mode_type == "填空挑戰 (Cloze)" and ex_val:
-            # 忽略大小寫替換關鍵字
-            pattern = re.compile(re.escape(target['word']), re.IGNORECASE)
-            cloze_text = pattern.sub(" _______ ", ex_val)
-
-        st.session_state[target_state_key] = {
-            'word': target['word'], 
-            'correct_ans': correct_ans, 
-            'pos': target['pos'], 
-            'options': options,
-            'example': ex_val,
-            'point': pt_val,
-            'cloze_text': cloze_text
-        }
-        st.session_state.ans_revealed = False
-        st.session_state.is_correct = None
-    except Exception as e: 
-        st.error(f"生成失敗：{e}")
-
-@st.cache_data(ttl=60)
-def fetch_data():
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        return conn.read()
-    except: return pd.DataFrame()
-
-st.session_state.full_df = fetch_data()
-
-# ==============================================================================
-# 3. 介面路由
-# ==============================================================================
-with st.sidebar:
-    mode = st.radio("🚀 功能模式切換", ["開始測驗", "錯題強化挑戰", "新增單字庫"])
-
-st.title("📖 多益單字強化練習")
-
-if mode == "開始測驗":
-    if st.session_state.full_df.empty:
-        st.warning("📭 單字庫為空。")
-    else:
-        if st.session_state.quiz_data is None: generate_question(st.session_state.full_df, 'quiz_data')
-        q = st.session_state.quiz_data
-        
-        if q:
-            # --- 題目顯示區 ---
-            with st.container():
-                if quiz_mode_type == "標準選擇題":
-                    st.markdown(f'<div class="quiz-container"><div class="quiz-word">{q["word"]}</div><div class="quiz-pos">({q["pos"]})</div></div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="quiz-container"><div class="cloze-sentence">{q["cloze_text"]}</div><div class="quiz-pos">({q["pos"]})</div></div>', unsafe_allow_html=True)
+        # 補充資訊與發音
+        with st.expander("🔍 查看解析與發音", expanded=True):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("🔊 單字發音"): speak(q['word'])
+            with col_b:
+                if q['example'] and st.button("📢 例句發音"): speak(q['example'])
             
-            # --- 選項按鈕 ---
-            cols = st.columns(2)
-            for i, option in enumerate(q['options']):
-                with cols[i % 2]:
-                    if st.button(option, key=f"btn_{i}", use_container_width=True, disabled=st.session_state.ans_revealed):
-                        progress['total_answered'] += 1
-                        st.session_state.ans_revealed = True
-                        if option == q['correct_ans']:
-                            progress['score'] += 1
-                            st.session_state.is_correct = True
-                        else:
-                            st.session_state.is_correct = False
-                            if not any(item['word'] == q['word'] for item in progress['wrong_answers']):
-                                progress['wrong_answers'].append({
-                                    'word': q['word'], 'pos': q['pos'],
-                                    'definition': q['word'], 'mastered': False
-                                })
-                        st.rerun()
+            if q['point']: st.info(f"📌 重點：{q['point']}")
+            if q['example']: st.write(f"💡 例句：{q['example']}")
 
-            # --- 回饋區 ---
-            if st.session_state.ans_revealed:
-                if st.session_state.is_correct:
-                    st.success("🎯 太棒了！回答正確！")
-                else:
-                    st.error(f"❌ 不對喔！正確答案是：**{q['correct_ans']}**")
-                
-                # --- 修改後的發音按鈕區 (單字 + 例句) ---
-                c1, c2, _ = st.columns([1,1,3])
-                with c1:
-                    play_word = st.button("🔊 單字發音")
-                with c2:
-                    play_example = False
-                    if q['example']:
-                        play_example = st.button("📢 例句發音")
-
-                if play_word:
-                    speak_text(q['word'])
-
-                if play_example:
-                    speak_text(q['example'])
-
-                if q['point']:
-                    st.markdown(f'<div class="point-box"><b>📌 出題重點：</b>{q["point"]}</div>', unsafe_allow_html=True)
-
-                if q['example']:
-                    # 顯示例句文字
-                    st.markdown(f"""
-                        <div class="example-box">
-                            <div class="example-label">💡 Usage Example:</div>
-                            {q['example']}
-                        </div>
-                    """, unsafe_allow_html=True)
-                
-                if st.button("➡️ 下一題", type="primary", use_container_width=True):
-                    generate_question(st.session_state.full_df, 'quiz_data')
-                    st.rerun()
+        if st.button("➡️ 下一題", type="primary", use_container_width=True):
+            st.session_state.q = None
+            st.rerun()
+else:
+    st.info("目前單字庫空空如也，請先點擊側邊欄的同步按鈕！")
 
 # --- 模式 3：新增單字庫 ---
 elif mode == "新增單字庫":
