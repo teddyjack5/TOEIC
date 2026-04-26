@@ -214,6 +214,19 @@ if mode == "開始測驗":
                 st.success("🎯 Correct!")
             else:
                 st.error(f"❌ Wrong! Answer: {q['correct_ans']}")
+
+            with st.expander("🔍 查看解析與發音", expanded=True):
+                # 建立兩欄來放發音按鈕
+                voice_col1, voice_col2 = st.columns(2)
+                with voice_col1:
+                    if st.button("🔊 單字發音", key=f"voc_{q['id']}", use_container_width=True):
+                        speak(q['word'])
+                with voice_col2:
+                    if q['example'] and str(q['example']) != 'nan':
+                        if st.button("📢 例句發音", key=f"ex_{q['id']}", use_container_width=True):
+                            speak(q['example'])
+                
+                st.divider() # 加一條分割線
             
             # --- 解析區塊 (展開解析) ---
             with st.expander("🔍 查看解析與重點", expanded=True):
