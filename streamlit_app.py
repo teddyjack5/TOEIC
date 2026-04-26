@@ -173,15 +173,20 @@ if mode == "開始測驗":
 
     q = st.session_state.q
     if q:
-        # 顯示文字邏輯：填空模式顯示底線文字，標準模式顯示單字
+        # --- 核心顯示邏輯修改 ---
         is_cloze = "Cloze" in quiz_mode
-        display_text = q['cloze_text'] if (is_cloze and q['cloze_text']) else q['word']
-    else :
-        display_text = q['defintion']
+        
+        if is_cloze:
+            # 填空模式：顯示有底線的英文句子
+            display_text = q['cloze_text'] if q['cloze_text'] else q['word']
+        else:
+            # 標準模式：顯示中文定義，讓使用者選英文單字
+            display_text = q['definition'] 
+        # ------------------------
 
         st.markdown(f"""
             <div style="background-color:#1E2E44; padding:30px; border-radius:15px; text-align:center; margin-bottom:20px;">
-                <h1 style="color:white; font-size: 40px;">{display_text}</h1>
+                <h1 style="color:white; font-size: 32px;">{display_text}</h1>
                 <p style="color:#FF4B4B;">({q['pos']})</p>
             </div>
         """, unsafe_allow_html=True)
