@@ -153,15 +153,29 @@ def speak_html(text):
         return
 
     try:
-        # 使用 BytesIO 在記憶體中處理，不產生實體暫存檔，反應更快
         tts = gTTS(text=clean_text, lang='en')
-        mp3_fp = io.BytesIO()
-        tts.write_to_fp(mp3_fp)
-        
-        # 2. 關鍵修正：使用 st.audio 並傳入 bytes
-        # 加上 format="audio/mp3" 並確保每次呼叫都渲染
-        st.audio(mp3_fp.getvalue(), format="audio/mp3", autoplay=True)
-        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+            tts.save(f.name)
+            with open(f.name, "rb") as audio_file:
+                audio_bytes = audio_file.read()
+            
+            audio_base64 = base64.b64encode(audio_bytes).decode()
+            
+            # 2. 核心修正：使用隨機產生的 ID (UUID)
+            # 讓每次產出的 HTML 結構在瀏覽器眼中都是「全新創立」的元件
+            unique_id = str(uuid.uuid4())[:8]
+            
+            audio_tag = f'''
+                <div id="audio-container-{unique_id}">
+                    <audio autoplay>
+                        <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
+                    </audio>
+                    </div>
+            '''
+            # 使用 empty 容器或直接 markdown 渲染
+            st.markdown(audio_tag, unsafe_allow_html=True)
+            
+            os.unlink(f.name)
     except Exception as e:
         st.error(f"發音失敗: {e}")
 
