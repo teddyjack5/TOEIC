@@ -185,17 +185,27 @@ if mode == "開始測驗":
         """, unsafe_allow_html=True)
         st.write("")
 
-        # --- 選項顯示邏輯 (重點修正) ---
-        # 即使 answered 是 True，我們也讓按鈕留著，只是 disabled
-        cols = st.columns(2)
+cols = st.columns(2)
         for i, opt in enumerate(q['options']):
             with cols[i % 2]:
-                # 這裡直接渲染按鈕，不加額外的 if 判斷
+                # 關鍵點：使用唯一的 key，並在點擊時進行類型轉換
                 if st.button(opt, key=f"btn_{q['id']}_{i}", use_container_width=True, disabled=st.session_state.answered):
+                    # 1. 立即標記已回答，防止重複觸發
                     st.session_state.answered = True
-                    is_correct = (opt == q['correct_ans'])
-                    update_progress(user_id, q['id'], is_correct)
+                    
+                    # 2. 判定對錯
+                    is_correct = bool(opt == q['correct_ans'])
                     st.session_state.last_result = is_correct
+                    
+                    # 3. 安全更新資料庫 (強制轉型避免 SQLite 報錯)
+                    # 確保 q['id'] 傳進去的是原生 int，而不是 numpy.int64
+                    try:
+                        vocab_id_int = int(q['id'])
+                        update_progress(user_id, vocab_id_int, is_correct)
+                    except Exception as e:
+                        st.error(f"進度更新失敗: {e}")
+                    
+                    # 4. 重新渲染頁面以顯示結果
                     st.rerun()
 
         # 答題後的結果與解析
@@ -205,9 +215,16 @@ if mode == "開始測驗":
             else:
                 st.error(f"❌ Wrong! Answer: {q['correct_ans']}")
             
-            # 解析區塊... (省略)
+            # --- 解析區塊 (展開解析) ---
+            with st.expander("🔍 查看解析與重點", expanded=True):
+                if q['point'] and str(q['point']) != 'nan':
+                    st.info(f"📌 重點：{q['point']}")
+                if q['example'] and str(q['example']) != 'nan':
+                    st.write(f"💡 例句：{q['example']}")
             
+            # 下一題按鈕
             if st.button("➡️ 下一題", type="primary", use_container_width=True):
+                # 清空當前題目狀態，下一次重整時會自動觸發 get_weighted_question
                 st.session_state.q = None
                 st.session_state.answered = False
                 st.rerun()
