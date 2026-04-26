@@ -143,6 +143,19 @@ def speak(text):
 with st.sidebar:
     st.title("⚙️ 控制面板")
     user_id = st.text_input("👤 使用者識別 (ID)", value="", placeholder="請輸入您的名稱...")
+
+    st.header("🎨 介面設定")
+    theme_mode = st.selectbox("切換主題模式", ["深色模式 (Dark)", "淺色模式 (Light)"])
+    quiz_mode_type = st.selectbox("📝 測驗題型", ["標準選擇題", "填空挑戰 (Cloze)"])
+    auto_audio = st.checkbox("🔊 答題後自動發音", value=True)
+    
+    if theme_mode == "深色模式 (Dark)":
+        main_bg, card_bg, text_color = "#0E1117", "#1E1E1E", "#FFFFFF"
+        quiz_box_bg = "#1A2E44"
+        ex_bg = "#262730"
+    else:
+        main_bg, card_bg, text_color = "#FFFFFF", "#F0F2F6", "#1F1F1F"
+        quiz_box_bg = "#E1F5FE"
     
     # 這裡定義 mode，後續的 if/elif 必須對應這裡的選項
     mode = st.radio("🚀 功能模式切換", ["開始測驗", "新增單字庫"])
