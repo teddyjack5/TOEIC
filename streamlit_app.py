@@ -128,8 +128,6 @@ with st.sidebar:
     theme_mode = st.radio("主題模式", ["深色", "淺色"], horizontal=True)
     quiz_mode = st.selectbox("📝 測驗題型", ["標準選擇題", "填空挑戰 (Cloze)"], key="main_quiz_mode")
     
-    mode = st.radio("🚀 功能切換", ["開始測驗", "新增單字庫"])
-    
     if st.button("🔄 同步雲端單字庫"):
         if sync_data(): st.success("同步成功！")
     
