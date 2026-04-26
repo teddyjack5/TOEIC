@@ -128,7 +128,7 @@ with st.sidebar:
     quiz_mode = st.selectbox("📝 測驗題型", ["標準選擇題", "填空挑戰 (Cloze)"], key="main_quiz_mode")
     
     # --- 這裡最重要！補上 mode 定義 ---
-    mode = st.radio("🚀 功能切換", ["開始測驗", "新增單字庫"])
+    mode = st.radio("🚀 功能切換", ["開始測驗", "學習進度分析", "新增單字庫"])
     
     if st.button("🔄 同步雲端單字庫"):
         if sync_data(): st.success("同步成功！")
@@ -235,3 +235,46 @@ elif mode == "新增單字庫":
                 res = requests.post(url, json=payload)
                 if res.status_code == 200: st.success(f"✅ 『{w}』已送出！")
                 else: st.error("寫入失敗")
+
+# --- 模式 3：學習進度分析 ---
+elif mode == "學習進度分析":
+    st.subheader("📊 我的學習戰報")
+    
+    conn = sqlite3.connect(DB_NAME)
+    # 抓取該使用者的進度數據與單字資訊
+    query = """
+        SELECT v.word, v.definition, p.wrong_count, p.correct_streak, p.last_tested
+        FROM user_progress p
+        JOIN vocabs v ON p.vocab_id = v.id
+        WHERE p.user_id = ?
+        ORDER BY p.wrong_count DESC
+    """
+    df_progress = pd.read_sql_query(query, conn, params=(user_id,))
+    conn.close()
+
+    if df_progress.empty:
+        st.info("目前還沒有測驗紀錄，快去「開始測驗」挑戰看看吧！")
+    else:
+        # A. 頂部儀表板
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("已練習單字數", len(df_progress))
+        with col2:
+            # 假設連續正確 3 次以上算「熟練」
+            mastered_count = len(df_progress[df_progress['correct_streak'] >= 3])
+            st.metric("精通單字量 (Streak >= 3)", mastered_count)
+        with col3:
+            total_wrongs = df_progress['wrong_count'].sum()
+            st.metric("累計錯誤次數", int(total_wrongs))
+
+        # B. 視覺化圖表 (簡單展示前 10 名「魔王單字」)
+        st.write("### 😈 你的十大魔王單字 (錯誤次數最多)")
+        top_10_wrong = df_progress.head(10)
+        st.bar_chart(data=top_10_wrong, x='word', y='wrong_count', color="#FF4B4B")
+
+        # C. 詳細列表
+        with st.expander("詳細單字掌握度清單"):
+            # 格式化時間與呈現
+            df_display = df_progress.copy()
+            df_display.columns = ['單字', '定義', '錯誤次數', '連對次數', '最後測驗時間']
+            st.dataframe(df_display, use_container_width=True)
