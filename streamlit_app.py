@@ -92,7 +92,7 @@ def get_weighted_question(user_id, mode_type):
     target = df.sample(n=1, weights='weight').iloc[0]
     is_standard = "標準選擇題" in mode_type
     target_col = 'definition' if is_standard else 'word'
-    correct_ans = str(target[target_col])
+    correct_ans = str(target['word'])
 
     dist_query = f"SELECT {'definition' if is_standard else 'word'} FROM vocabs WHERE word != ? ORDER BY RANDOM() LIMIT 3"
     dist_df = pd.read_sql_query(dist_query, conn, params=(target['word'],))
