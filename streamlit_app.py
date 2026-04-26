@@ -6,6 +6,7 @@ import re
 import tempfile
 import os
 import requests
+import base64
 from gtts import gTTS
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
@@ -139,13 +140,15 @@ def get_weighted_question(user_id, mode_type):
         'point': str(target['point']), 
         'cloze_text': cloze_text
     }
-def speak(text):
-    if not text or str(text) == 'nan': return
-    clean_text = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\']+', text))
-    tts = gTTS(text=clean_text, lang='en')
+def speak_html(text):
+    tts = gTTS(text=text, lang='en')
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
         tts.save(f.name)
-        st.audio(f.name, format="audio/mp3", autoplay=False)
+        with open(f.name, "rb") as audio_file:
+            audio_bytes = audio_file.read()
+        audio_base64 = base64.b64encode(audio_bytes).decode()
+        audio_tag = f'<audio src="data:audio/mp3;base64,{audio_base64}" controls autoplay></audio>'
+        st.markdown(audio_tag, unsafe_allow_html=True)
 
 # ==============================================================================
 # 4. 主程式介面
