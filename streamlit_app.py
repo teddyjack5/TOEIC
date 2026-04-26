@@ -239,24 +239,25 @@ if mode == "開始測驗":
             with st.expander("🔍 查看解析與發音", expanded=True):
                 vcol1, vcol2 = st.columns(2)
                 
-                # 取得乾淨的內容進行判斷
+                # 預先處理字串，避免 nan 或 None 報錯
                 example_text = str(q.get('example', ''))
                 has_example = example_text.lower() != 'nan' and example_text.strip() != ""
+                word_text = str(q.get('word', ''))
 
                 with vcol1:
-                    # 使用隨機數或時間戳記確保 key 不重複
-                    if st.button("🔊 單字發音", key=f"v_{q['id']}_{datetime.now().strftime('%M%S')}"): 
-                        speak(q['word'])
+                    # 使用穩定且唯一的 Key (題目ID + 模式名稱)
+                    if st.button("🔊 單字發音", key=f"btn_v_{q['id']}_{quiz_mode}"): 
+                        speak(word_text)
                 
                 with vcol2:
                     if has_example:
-                        # 例句發音按鈕
-                        if st.button("📢 例句發音", key=f"e_{q['id']}_{datetime.now().strftime('%M%S')}"): 
+                        # 使用穩定且唯一的 Key
+                        if st.button("📢 例句發音", key=f"btn_e_{q['id']}_{quiz_mode}"): 
                             speak(example_text)
                     else:
                         st.write("🙌 此單字暫無例句")
                 
-                # 顯示重點與例句
+                # 顯示資訊與例句
                 point_text = str(q.get('point', ''))
                 if point_text.lower() != 'nan' and point_text.strip() != "":
                     st.info(f"📌 重點：{point_text}")
