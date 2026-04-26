@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as component
 import pandas as pd
 import sqlite3
 import random
@@ -145,50 +146,58 @@ def get_weighted_question(user_id, mode_type):
     }
 def create_audio_button(text, button_text, theme_mode):
     if not text or str(text).lower() == 'nan':
-        return ""
+        return
     
-    # 1. 濾掉中文，只留英文與標點
+    # 1. 濾掉中文，只留英文
     clean_text = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\']+', text))
     if not clean_text.strip():
-        return ""
+        return
 
     try:
-        # 在記憶體中直接產生音訊
+        # 在記憶體中產生音訊
         tts = gTTS(text=clean_text, lang='en')
         mp3_fp = io.BytesIO()
         tts.write_to_fp(mp3_fp)
         audio_base64 = base64.b64encode(mp3_fp.getvalue()).decode()
 
-        # 產生不重複的 ID
-        unique_id = "audio_" + str(uuid.uuid4())[:8]
-
-        # 自動適應你的深淺色主題
-        bg_color = "#262730" if theme_mode == "深色" else "#FFFFFF"
-        text_color = "white" if theme_mode == "深色" else "black"
+        # 設定主題顏色
+        bg_color = "#262730" if theme_mode == "深色" else "#F0F2F6"
+        text_color = "white" if theme_mode == "深色" else "#31333F"
         border_color = "#4B4B4B" if theme_mode == "深色" else "#DDE4ED"
 
-        # 2. 產出帶有 JavaScript 點擊播放事件的原生 HTML 按鈕
-        html = f"""
-        <audio id="{unique_id}" src="data:audio/mp3;base64,{audio_base64}"></audio>
-        <button onclick="document.getElementById('{unique_id}').play()"
-                style="
-                    width: 100%;
-                    background-color: {bg_color};
-                    color: {text_color};
-                    border: 1px solid {border_color};
-                    padding: 0.5rem 1rem;
-                    font-size: 16px;
-                    border-radius: 0.5rem;
-                    cursor: pointer;
-                    text-align: center;
-                    margin-bottom: 0px;
-                ">
-            {button_text}
-        </button>
+        # 2. HTML/JS 原始碼 (放在 Iframe 沙盒內)
+        # 使用 components.html 確保 JS onclick 能執行
+        html_code = f"""
+        <html>
+            <body style="margin:0; padding:0; overflow:hidden; background-color:transparent;">
+                <audio id="audio_player" src="data:audio/mp3;base64,{audio_base64}"></audio>
+                <button onclick="document.getElementById('audio_player').play()"
+                        style="
+                            width: 100%;
+                            background-color: {bg_color};
+                            color: {text_color};
+                            border: 1px solid {border_color};
+                            padding: 10px 15px;
+                            font-family: sans-serif;
+                            font-size: 14px;
+                            font-weight: 500;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            box-sizing: border-box;
+                        ">
+                    {button_text}
+                </button>
+            </body>
+        </html>
         """
-        return html
+        # 渲染組件
+        components.html(html_code, height=45)
+        
     except Exception as e:
-        return f"<div style='color:red;'>發音載入失敗: {e}</div>"
+        st.error(f"發音載入失敗: {e}")
 
 # ==============================================================================
 # 4. 主程式介面
@@ -279,21 +288,18 @@ if mode == "開始測驗":
             with st.expander("🔍 查看解析與發音", expanded=True):
                 vcol1, vcol2 = st.columns(2)
                 
-                # 預先處理字串
                 example_text = str(q.get('example', ''))
                 has_example = example_text.lower() != 'nan' and example_text.strip() != ""
                 word_text = str(q.get('word', ''))
 
                 with vcol1:
-                    # 直接渲染前端發音按鈕 (單字)
-                    html_btn_word = create_audio_button(word_text, "🔊 單字發音", theme_mode)
-                    st.markdown(html_btn_word, unsafe_allow_html=True)
+                    # 👈 直接呼叫，它現在會自己畫出組件
+                    create_audio_button(word_text, "🔊 單字發音", theme_mode)
                 
                 with vcol2:
                     if has_example:
-                        # 直接渲染前端發音按鈕 (例句)
-                        html_btn_example = create_audio_button(example_text, "📢 例句發音", theme_mode)
-                        st.markdown(html_btn_example, unsafe_allow_html=True)
+                        # 👈 同上
+                        create_audio_button(example_text, "📢 例句發音", theme_mode)
                     else:
                         st.write("🙌 此單字暫無例句")
                 
