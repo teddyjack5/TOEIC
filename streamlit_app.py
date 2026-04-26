@@ -150,23 +150,30 @@ def speak_html(text):
     if not clean_text.strip():
         return
 
-    tts = gTTS(text=clean_text, lang='en')
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
-        tts.save(f.name)
-        with open(f.name, "rb") as audio_file:
-            audio_bytes = audio_file.read()
-        
-        audio_base64 = base64.b64encode(audio_bytes).decode()
-        
-        # 2. 關鍵修正：在 data URL 後面加上 #t={timestamp}
-        # 這樣瀏覽器會認為這是一個新的資源，進而觸發重新播放
-        ts = time.time()
-        audio_tag = f'''
-            <audio autoplay key="{ts}">
-                <source src="data:audio/mp3;base64,{audio_base64}#t={ts}" type="audio/mp3">
-            </audio>
-        '''
-        st.markdown(audio_tag, unsafe_allow_html=True)
+    try:
+        tts = gTTS(text=clean_text, lang='en')
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+            tts.save(f.name)
+            with open(f.name, "rb") as audio_file:
+                audio_bytes = audio_file.read()
+            
+            audio_base64 = base64.b64encode(audio_bytes).decode()
+            
+            # 2. 核心修正：
+            # (A) 移除 Base64 後面的 #t={ts}，保持數據純淨
+            # (B) 在 HTML 中加入一個隨機註解 # 這會強迫瀏覽器認為這是「全新的 HTML 內容」，進而觸發 autoplay
+            ts = time.time()
+            audio_tag = f'''
+                <audio autoplay>
+                    <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
+                </audio>
+            '''
+            st.markdown(audio_tag, unsafe_allow_html=True)
+            
+            # 視需要清理暫存檔
+            os.unlink(f.name)
+    except Exception as e:
+        st.error(f"發音失敗: {e}")
 
 # ==============================================================================
 # 4. 主程式介面
