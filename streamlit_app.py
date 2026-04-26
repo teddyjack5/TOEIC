@@ -163,25 +163,54 @@ st.title(f"📖 {user_id} 的多益訓練營")
 
 # --- 模式 1：開始測驗 ---
 if mode == "開始測驗":
-    # 狀態初始化
+    # 初始化狀態
     if 'q' not in st.session_state: st.session_state.q = None
     if 'answered' not in st.session_state: st.session_state.answered = False
 
+    # 觸發抽題
     if st.session_state.q is None:
         st.session_state.q = get_weighted_question(user_id, quiz_mode)
         st.session_state.answered = False
+        st.rerun() # 強制重新整理確保狀態同步
 
     q = st.session_state.q
 
     if q:
-        # (這裡放原本的測驗顯示邏輯，包含 st.markdown 題目卡片、選項按鈕等)
-        st.markdown(f'<div class="quiz-container"><h1>{q["word"] if quiz_mode == "標準選擇題" else q["cloze_text"]}</h1></div>', unsafe_allow_html=True)
-        st.write(st.session_state.q)
-        
-        # ... (選項按鈕與回饋邏輯)
-        # 答題後的「下一題」按鈕記得要設 st.session_state.q = None
-    else:
-        st.info("目前單字庫為空，請先同步或新增單字。")
+        # 顯示單字
+        st.markdown(f"""
+            <div style="background-color:#1E2E44; padding:30px; border-radius:15px; text-align:center;">
+                <h1 style="color:white;">{q['word'] if quiz_mode == "標準選擇題" else q['cloze_text']}</h1>
+                <p style="color:#FF4B4B;">({q['pos']})</p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.write("")
+
+        # --- 選項顯示邏輯 (重點修正) ---
+        # 即使 answered 是 True，我們也讓按鈕留著，只是 disabled
+        cols = st.columns(2)
+        for i, opt in enumerate(q['options']):
+            with cols[i % 2]:
+                # 這裡直接渲染按鈕，不加額外的 if 判斷
+                if st.button(opt, key=f"btn_{q['id']}_{i}", use_container_width=True, disabled=st.session_state.answered):
+                    st.session_state.answered = True
+                    is_correct = (opt == q['correct_ans'])
+                    update_progress(user_id, q['id'], is_correct)
+                    st.session_state.last_result = is_correct
+                    st.rerun()
+
+        # 答題後的結果與解析
+        if st.session_state.answered:
+            if st.session_state.last_result:
+                st.success("🎯 Correct!")
+            else:
+                st.error(f"❌ Wrong! Answer: {q['correct_ans']}")
+            
+            # 解析區塊... (省略)
+            
+            if st.button("➡️ 下一題", type="primary", use_container_width=True):
+                st.session_state.q = None
+                st.session_state.answered = False
+                st.rerun()
 
 # --- 模式 2：新增單字庫 (修正 SyntaxError 的關鍵區塊) ---
 elif mode == "新增單字庫":
