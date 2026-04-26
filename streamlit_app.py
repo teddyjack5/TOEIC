@@ -141,13 +141,25 @@ def get_weighted_question(user_id, mode_type):
         'cloze_text': cloze_text
     }
 def speak_html(text):
-    tts = gTTS(text=text, lang='en')
+    if not text or str(text).lower() == 'nan':
+        return
+    
+    # --- 關鍵過濾邏輯 ---
+    # 只保留英文、數字、常見標點符號 (.,?!)，其餘（如中文）皆替換為空格
+    clean_text = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\']+', text))
+    
+    # 如果過濾後是空的，就不執行
+    if not clean_text.strip():
+        return
+
+    tts = gTTS(text=clean_text, lang='en')
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
         tts.save(f.name)
         with open(f.name, "rb") as audio_file:
             audio_bytes = audio_file.read()
         audio_base64 = base64.b64encode(audio_bytes).decode()
-        audio_tag = f'<audio src="data:audio/mp3;base64,{audio_base64}" controls autoplay></audio>'
+        # 設定為 autoplay 讓它按下去立刻發聲
+        audio_tag = f'<audio src="data:audio/mp3;base64,{audio_base64}" autoplay></audio>'
         st.markdown(audio_tag, unsafe_allow_html=True)
 
 # ==============================================================================
