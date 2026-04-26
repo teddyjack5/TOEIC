@@ -142,7 +142,7 @@ def speak(text):
 # ==============================================================================
 with st.sidebar:
     st.title("⚙️ 控制面板")
-    user_id = st.text_input("👤 使用者識別 (ID)", value="小鐵")
+    user_id = st.text_input("👤 使用者識別 (ID)", value="", placeholder="請輸入您的名稱...")
     
     # 這裡定義 mode，後續的 if/elif 必須對應這裡的選項
     mode = st.radio("🚀 功能模式切換", ["開始測驗", "新增單字庫"])
@@ -160,6 +160,10 @@ with st.sidebar:
         st.rerun()
 
 st.title(f"📖 {user_id} 的多益訓練營")
+if not user_id.strip():
+    st.warning("👋 歡迎！請先在左側控制面板輸入您的「使用者識別 ID」以載入學習進度。")
+    st.info("💡 提示：輸入不同的 ID 將會建立獨立的學習紀錄喔！")
+    st.stop()
 
 # --- 模式 1：開始測驗 ---
 if mode == "開始測驗":
