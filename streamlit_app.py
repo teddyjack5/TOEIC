@@ -142,7 +142,36 @@ with st.sidebar:
 
 # 注入簡單主題 CSS
 if theme_mode == "深色":
-    st.markdown("<style>.stApp { background-color: #0E1117; color: white; }</style>", unsafe_allow_html=True)
+    st.markdown("""
+        <style>
+        /* 1. 全域背景與文字 */
+        .stApp { 
+            background-color: #0E1117; 
+            color: white; 
+        }
+        
+        /* 2. 強制修改所有按鈕的樣式 (解決選項看不見的問題) */
+        div.stButton > button {
+            background-color: #262730 !important; /* 深灰色背景 */
+            color: #FFFFFF !important;           /* 純白文字 */
+            border: 1px solid #4B4B4B !important; /* 灰色邊框 */
+        }
+        
+        /* 3. 答題後的正確/錯誤訊息文字顏色優化 */
+        .stSuccess, .stError {
+            color: white !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    # 淺色模式維持預設，或稍微優化
+    st.markdown("""
+        <style>
+        div.stButton > button {
+            border: 1px solid #DDE4ED !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
 st.title(f"📖 {user_id if user_id else '訪客'} 的多益訓練營")
 
