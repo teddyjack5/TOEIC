@@ -7,6 +7,7 @@ import tempfile
 import os
 import requests
 import base64
+import time
 from gtts import gTTS
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
