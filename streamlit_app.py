@@ -143,41 +143,52 @@ def get_weighted_question(user_id, mode_type):
         'point': str(target['point']), 
         'cloze_text': cloze_text
     }
-def speak_html(text):
+def create_audio_button(text, button_text, theme_mode):
     if not text or str(text).lower() == 'nan':
-        return
+        return ""
     
     # 1. 濾掉中文，只留英文與標點
     clean_text = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\']+', text))
     if not clean_text.strip():
-        return
+        return ""
 
     try:
+        # 在記憶體中直接產生音訊
         tts = gTTS(text=clean_text, lang='en')
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
-            tts.save(f.name)
-            with open(f.name, "rb") as audio_file:
-                audio_bytes = audio_file.read()
-            
-            audio_base64 = base64.b64encode(audio_bytes).decode()
-            
-            # 2. 核心修正：使用隨機產生的 ID (UUID)
-            # 讓每次產出的 HTML 結構在瀏覽器眼中都是「全新創立」的元件
-            unique_id = str(uuid.uuid4())[:8]
-            
-            audio_tag = f'''
-                <div id="audio-container-{unique_id}">
-                    <audio autoplay>
-                        <source src="data:audio/mp3;base64,{audio_base64}" type="audio/mp3">
-                    </audio>
-                    </div>
-            '''
-            # 使用 empty 容器或直接 markdown 渲染
-            st.markdown(audio_tag, unsafe_allow_html=True)
-            
-            os.unlink(f.name)
+        mp3_fp = io.BytesIO()
+        tts.write_to_fp(mp3_fp)
+        audio_base64 = base64.b64encode(mp3_fp.getvalue()).decode()
+
+        # 產生不重複的 ID
+        unique_id = "audio_" + str(uuid.uuid4())[:8]
+
+        # 自動適應你的深淺色主題
+        bg_color = "#262730" if theme_mode == "深色" else "#FFFFFF"
+        text_color = "white" if theme_mode == "深色" else "black"
+        border_color = "#4B4B4B" if theme_mode == "深色" else "#DDE4ED"
+
+        # 2. 產出帶有 JavaScript 點擊播放事件的原生 HTML 按鈕
+        html = f"""
+        <audio id="{unique_id}" src="data:audio/mp3;base64,{audio_base64}"></audio>
+        <button onclick="document.getElementById('{unique_id}').play()"
+                style="
+                    width: 100%;
+                    background-color: {bg_color};
+                    color: {text_color};
+                    border: 1px solid {border_color};
+                    padding: 0.5rem 1rem;
+                    font-size: 16px;
+                    border-radius: 0.5rem;
+                    cursor: pointer;
+                    text-align: center;
+                    margin-bottom: 0px;
+                ">
+            {button_text}
+        </button>
+        """
+        return html
     except Exception as e:
-        st.error(f"發音失敗: {e}")
+        return f"<div style='color:red;'>發音載入失敗: {e}</div>"
 
 # ==============================================================================
 # 4. 主程式介面
@@ -268,21 +279,21 @@ if mode == "開始測驗":
             with st.expander("🔍 查看解析與發音", expanded=True):
                 vcol1, vcol2 = st.columns(2)
                 
-                # 預先處理字串，避免 nan 或 None 報錯
+                # 預先處理字串
                 example_text = str(q.get('example', ''))
                 has_example = example_text.lower() != 'nan' and example_text.strip() != ""
                 word_text = str(q.get('word', ''))
 
                 with vcol1:
-                    # 使用穩定且唯一的 Key (題目ID + 模式名稱)
-                    if st.button("🔊 單字發音", key=f"btn_v_{q['id']}_{quiz_mode}"): 
-                        speak_html(word_text)
+                    # 直接渲染前端發音按鈕 (單字)
+                    html_btn_word = create_audio_button(word_text, "🔊 單字發音", theme_mode)
+                    st.markdown(html_btn_word, unsafe_allow_html=True)
                 
                 with vcol2:
                     if has_example:
-                        # 使用穩定且唯一的 Key
-                        if st.button("📢 例句發音", key=f"btn_e_{q['id']}_{quiz_mode}"): 
-                            speak_html(example_text)
+                        # 直接渲染前端發音按鈕 (例句)
+                        html_btn_example = create_audio_button(example_text, "📢 例句發音", theme_mode)
+                        st.markdown(html_btn_example, unsafe_allow_html=True)
                     else:
                         st.write("🙌 此單字暫無例句")
                 
