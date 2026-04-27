@@ -35,14 +35,16 @@ def init_db():
 init_db()
 
 # ==============================================================================
-# 工具函式：過濾中文
+# 需求修正：針對「英文.(中文)」格式的過濾邏輯
 # ==============================================================================
-def remove_chinese(text):
-    """使用正則表達式移除字串中的中文字元"""
+def filter_only_english(text):
+    """針對固定格式：英文.(中文) ，只取左括號前的內容"""
     if not text:
         return ""
-    # 移除中文範圍字元
-    return re.sub(r'[\u4e00-\u9fff]+', '', text).strip()
+    if "(" in text:
+        # 取得左括號前面的所有文字
+        return text.split("(")[0].strip()
+    return text.strip()
 
 # ==============================================================================
 # 自動同步功能 (10天一次)
@@ -140,18 +142,16 @@ def get_cloze_question(user_id):
         conn.close()
         return None
 
-    # 權重隨機抽題
     df['weight'] = 1 + df['wrongs'] * 5 - df['streak'] * 1.5
     df['weight'] = df['weight'].clip(lower=0.1)
     target = df.sample(n=1, weights='weight').iloc[0]
     
-    full_sentence = str(target['example'])
+    full_example = str(target['example'])
     word = str(target['word'])
     
-    # 🔥 核心修正：先在含有中文的句子中挖空，確保一定能挖成功
-    blanked = re.sub(re.escape(word), " ______ ", full_sentence, flags=re.IGNORECASE)
-    # 挖空後，再移除句子中的中文，確保題目是全英文
-    blank_sentence = remove_chinese(blanked)
+    # 🔥 關鍵修正：先只擷取英文部分，再做挖空
+    english_part = filter_only_english(full_example)
+    blank_sentence = re.sub(re.escape(word), " ______ ", english_part, flags=re.IGNORECASE)
     
     dist = pd.read_sql_query("SELECT word FROM vocabs WHERE word != ? ORDER BY RANDOM() LIMIT 3", conn, params=(word,))
     options = dist['word'].tolist() + [word]
@@ -160,13 +160,13 @@ def get_cloze_question(user_id):
     
     return {
         "id": int(target["id"]), "sentence": blank_sentence, "answer": word,
-        "options": options, "example": full_sentence, "point": target["point"], "word": word
+        "options": options, "example": full_example, "point": target["point"], "word": word
     }
 
 def create_audio_button(text, button_text, theme_mode):
     if not text: return
-    clean_text = remove_chinese(text)
-    clean_text = re.sub(r'[^a-zA-Z0-9\s\.,?!]', '', clean_text)
+    # 發音也只發英文部分
+    clean_text = filter_only_english(text)
     try:
         tts = gTTS(text=clean_text, lang='en')
         mp3_fp = io.BytesIO()
@@ -213,8 +213,8 @@ if mode == "測驗":
 
     st.progress(min(st.session_state.count / TOTAL, 1.0))
     st.markdown(f"🏆 {st.session_state.score}　🔥 {st.session_state.streak}")
-    st.markdown('<img src="https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=800&q=80" class="banner-img">', unsafe_allow_html=True)
-
+    
+    # 題目顯示邏輯
     if practice_mode == "填空":
         display_text = q.get("sentence", "") 
     else:
