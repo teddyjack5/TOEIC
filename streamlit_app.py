@@ -241,8 +241,10 @@ if mode == "測驗":
         correct = q['correct']
         selected = st.session_state.selected
 
+        # =========================
+        # ❗ 結果提示
+        # =========================
         is_correct = selected == correct
-        update_progress(user_id, q['id'], is_correct)
 
         if is_correct:
             st.success("✅ Correct")
@@ -252,51 +254,69 @@ if mode == "測驗":
             st.error(f"❌ {correct}")
             st.session_state.streak = 0
 
+
         # =========================
-        # 📌 重點區塊
+        # 🎯 Step 1：基本結果
         # =========================
-        st.markdown("""
-        <div style="
-            background:#1F2937;
-            padding:18px;
-            border-radius:16px;
-            margin-top:15px;
-        ">
-            <div style="color:#60A5FA; font-size:14px; margin-bottom:8px;">
-                📌 考點重點
-            </div>
-            <div style="color:white; font-size:16px;">
-                """ + str(q['point']) + """
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        # =========================
-        # 💡 例句區塊
-        # =========================
-        st.markdown("""
+        st.markdown("### 📊 Answer Result")
+
+        st.markdown(f"""
         <div style="
             background:#111827;
             padding:18px;
-            border-radius:16px;
-            margin-top:12px;
+            border-radius:15px;
+            color:white;
+            text-align:center;
         ">
-            <div style="color:#34D399; font-size:14px; margin-bottom:8px;">
-                💡 例句
-            </div>
-            <div style="color:white; font-size:16px; line-height:1.6;">
-                """ + str(q['example']) + """
-            </div>
+            {'🎉 正確！' if is_correct else '📌 再加油'}
         </div>
         """, unsafe_allow_html=True)
 
-        # 發音
+
+        # =========================
+        # 🧠 Step 2：例句（可展開）
+        # =========================
+        with st.expander("💡 查看例句", expanded=False):
+            st.markdown(f"""
+            <div style="
+                background:#1F2937;
+                padding:15px;
+                border-radius:12px;
+                color:white;
+            ">
+                {q['example']}
+            </div>
+            """, unsafe_allow_html=True)
+
+
+        # =========================
+        # 📌 Step 3：考點（可展開）
+        # =========================
+        with st.expander("📌 查看考點", expanded=False):
+            st.markdown(f"""
+            <div style="
+                background:#0F172A;
+                padding:15px;
+                border-radius:12px;
+                color:white;
+            ">
+                {q['point']}
+            </div>
+            """, unsafe_allow_html=True)
+
+
+        # =========================
+        # 🔊 Step 4：發音（最後才出現）
+        # =========================
         st.markdown("### 🔊 發音")
+
         col1, col2 = st.columns(2)
+
         with col1:
             create_audio_button(q['word'], "🔊 單字", theme_mode)
+
         with col2:
-            if q['example']:
-                create_audio_button(q['example'], "📢 例句", theme_mode)
+            create_audio_button(q['example'], "📢 例句", theme_mode)
 
         # 下一題
         if st.button("➡️ 下一題"):
