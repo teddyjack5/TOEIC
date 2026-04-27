@@ -289,7 +289,7 @@ if mode == "測驗":
     # 題目顯示（🔥 Cloze / 單字統一）
     # =========================
     if practice_mode == "填空":
-        display_text = q["sentence"]
+        display_text = q.get("sentence", q.get("definition", ""))
     else:
         display_text = q["definition"]
 
