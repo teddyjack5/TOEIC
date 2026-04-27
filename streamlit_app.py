@@ -56,7 +56,7 @@ def init_db():
 init_db()
 
 # ==============================================================================
-# SYNC GOOGLE SHEET
+# SYNC
 # ==============================================================================
 def sync_data():
     conn_gs = st.connection("gsheets", type=GSheetsConnection)
@@ -74,7 +74,7 @@ def sync_data():
     conn.close()
 
 # ==============================================================================
-# PROGRESS UPDATE
+# PROGRESS
 # ==============================================================================
 def update_progress(user_id, vocab_id, correct):
     conn = sqlite3.connect(DB_NAME)
@@ -96,7 +96,7 @@ def update_progress(user_id, vocab_id, correct):
     conn.close()
 
 # ==============================================================================
-# DUOLINGO MAP (關卡系統)
+# MAP
 # ==============================================================================
 def render_map(level):
     nodes = ""
@@ -122,42 +122,55 @@ def render_map(level):
             margin:10px auto;
             color:white;
             font-weight:bold;
-            box-shadow:0 0 10px {color};
-            animation:pop 1s ease;
         ">
             {status}<br>{i}
         </div>
         """
 
     st.markdown(f"""
-    <style>
-    @keyframes pop {{
-        0% {{ transform:scale(0.6); opacity:0; }}
-        100% {{ transform:scale(1); opacity:1; }}
-    }}
-    </style>
-
     <div style="text-align:center">
         {nodes}
     </div>
     """, unsafe_allow_html=True)
 
 # ==============================================================================
-# CLOZE
+# QUESTIONS
 # ==============================================================================
+def get_question(user_id):
+    conn = sqlite3.connect(DB_NAME)
+
+    df = pd.read_sql_query("""
+    SELECT * FROM vocabs
+    """, conn)
+
+    row = df.sample(1).iloc[0]
+
+    dist = pd.read_sql_query("""
+    SELECT word FROM vocabs
+    WHERE word != ? LIMIT 3
+    """, conn, params=(row["word"],))
+
+    options = dist["word"].tolist() + [row["word"]]
+    random.shuffle(options)
+
+    return {
+        "type": "mcq",
+        "definition": row["definition"],
+        "answer": row["word"],
+        "options": options,
+        "word": row["word"],
+        "example": row["example"],
+        "point": row["point"],
+        "id": row["id"]
+    }
+
 def get_cloze_question(user_id):
     conn = sqlite3.connect(DB_NAME)
 
     df = pd.read_sql_query("""
-    SELECT v.*, IFNULL(p.wrong_count,0) wrongs
-    FROM vocabs v
-    LEFT JOIN user_progress p
-    ON v.id=p.vocab_id AND p.user_id=?
-    WHERE v.example IS NOT NULL
-    """, conn, params=(user_id,))
-
-    if df.empty:
-        return None
+    SELECT * FROM vocabs
+    WHERE example IS NOT NULL
+    """, conn)
 
     row = df.sample(1).iloc[0]
 
@@ -186,40 +199,6 @@ def get_cloze_question(user_id):
     }
 
 # ==============================================================================
-# NORMAL QUESTION
-# ==============================================================================
-def get_question(user_id):
-    conn = sqlite3.connect(DB_NAME)
-
-    df = pd.read_sql_query("""
-    SELECT v.*, IFNULL(p.wrong_count,0) wrongs
-    FROM vocabs v
-    LEFT JOIN user_progress p
-    ON v.id=p.vocab_id AND p.user_id=?
-    """, conn, params=(user_id,))
-
-    row = df.sample(1).iloc[0]
-
-    dist = pd.read_sql_query("""
-    SELECT word FROM vocabs
-    WHERE word != ? LIMIT 3
-    """, conn, params=(row["word"],))
-
-    options = dist["word"].tolist() + [row["word"]]
-    random.shuffle(options)
-
-    return {
-        "type": "mcq",
-        "definition": row["definition"],
-        "answer": row["word"],
-        "options": options,
-        "word": row["word"],
-        "example": row["example"],
-        "point": row["point"],
-        "id": row["id"]
-    }
-
-# ==============================================================================
 # AUDIO
 # ==============================================================================
 def audio(text):
@@ -241,7 +220,7 @@ def audio(text):
     """, height=80)
 
 # ==============================================================================
-# UI STYLE
+# STYLE
 # ==============================================================================
 st.markdown("""
 <style>
@@ -251,17 +230,6 @@ st.markdown("""
     border-radius:20px;
     text-align:center;
     color:white;
-    animation:fade 0.4s ease;
-}
-
-@keyframes fade{
-    from{opacity:0; transform:translateY(10px);}
-    to{opacity:1;}
-}
-
-button{
-    border-radius:12px !important;
-    height:60px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -270,187 +238,106 @@ button{
 # SIDEBAR
 # ==============================================================================
 user = st.sidebar.text_input("User ID")
-mode = st.sidebar.radio("Mode", ["測驗","地圖"])
-practice = st.sidebar.selectbox("Type", ["單字","填空"])
+mode = st.sidebar.radio("Mode", ["測驗", "地圖", "新增單字庫"])
+practice = st.sidebar.selectbox("Type", ["單字", "填空"])
 
 if st.sidebar.button("Sync"):
     sync_data()
 
 # ==============================================================================
-# SESSION
+# STATE INIT
 # ==============================================================================
 if "q" not in st.session_state:
     st.session_state.q = None
-    st.session_state.level = 1
     st.session_state.state = "q"
+    st.session_state.level = 1
     st.session_state.score = 0
 
 # ==============================================================================
-# MAP MODE
+# ROUTER（🔥 修正核心）
 # ==============================================================================
 if mode == "地圖":
-    st.title("🗺 Duolingo Map")
+
+    st.title("🗺 Map")
     render_map(st.session_state.level)
     st.stop()
 
 # ==============================================================================
-# QUESTION
+# 測驗
 # ==============================================================================
-if st.session_state.q is None:
-    if practice == "填空":
-        st.session_state.q = get_cloze_question(user)
+if mode == "測驗":
+
+    if st.session_state.q is None:
+        if practice == "填空":
+            st.session_state.q = get_cloze_question(user)
+        else:
+            st.session_state.q = get_question(user)
+
+    q = st.session_state.q
+
+    text = q["sentence"] if q["type"] == "cloze" else q["definition"]
+
+    st.markdown(f"<div class='card'>{text}</div>", unsafe_allow_html=True)
+
+    if st.session_state.state == "q":
+
+        for o in q["options"]:
+            if st.button(o):
+                st.session_state.selected = o
+                st.session_state.state = "r"
+                st.rerun()
+
     else:
-        st.session_state.q = get_question(user)
+        correct = q["answer"]
+        sel = st.session_state.selected
+        ok = correct == sel
 
-q = st.session_state.q
+        update_progress(user, q["id"], ok)
 
-# ==============================================================================
-# CARD
-# ==============================================================================
-if q["type"] == "cloze":
-    text = q["sentence"]
-else:
-    text = q["definition"]
+        if ok:
+            st.success("✔ Correct")
+            st.session_state.score += 10
+            st.session_state.level += 1
+        else:
+            st.error(correct)
 
-st.markdown(f"""
-<div class="card">
-    {text}
-</div>
-""", unsafe_allow_html=True)
+        st.info(q["point"])
+        audio(q["word"])
 
-# ==============================================================================
-# ANSWER
-# ==============================================================================
-if st.session_state.state == "q":
-
-    for o in q["options"]:
-        if st.button(o):
-            st.session_state.selected = o
-            st.session_state.state = "r"
+        if st.button("Next"):
+            st.session_state.q = None
+            st.session_state.state = "q"
             st.rerun()
 
-else:
-    ans = q["answer"]
-    sel = st.session_state.selected
-
-    correct = ans == sel
-
-    update_progress(user, q["id"], correct)
-
-    if correct:
-        st.success("✔ Correct")
-        st.session_state.score += 10
-        st.session_state.level += 1
-    else:
-        st.error(f"❌ {ans}")
-
-    st.markdown("### 📌 Explanation")
-    st.info(q["point"])
-
-    st.markdown("### 🔊")
-    audio(q["word"])
-
-    if st.button("Next"):
-        st.session_state.q = None
-        st.session_state.state = "q"
-        st.rerun()
 # ==============================================================================
-# 新增單字（PRO UX VERSION）
+# 新增單字（🔥 完整修正）
 # ==============================================================================
 elif mode == "新增單字庫":
-    st.subheader("➕ 新增單字（Pro Mode）")
+
+    st.subheader("➕ 新增單字")
 
     url = st.secrets["connections"]["gsheets"].get("script_url")
 
-    # =========================
-    # FORM
-    # =========================
-    with st.form("add_word"):
-        w = st.text_input("英文單字")
-        d = st.text_input("中文定義")
-        ex = st.text_area("例句")
-        pt = st.text_area("考點")
+    with st.form("add"):
+        w = st.text_input("word")
+        d = st.text_input("definition")
+        ex = st.text_area("example")
+        pt = st.text_area("point")
 
-        submitted = st.form_submit_button("🚀 加入學習系統")
+        submit = st.form_submit_button("送出")
 
-    # =========================
-    # VALIDATION
-    # =========================
-    if submitted:
+    if submit:
 
         if not w or not d:
-            st.error("❌ 單字與定義不能為空")
+            st.error("word / definition 不能空")
             st.stop()
 
-        # =========================
-        # INSERT GOOGLE SHEET
-        # =========================
-        try:
-            payload = {
-                "word": w.strip(),
-                "definition": d.strip(),
-                "example": ex.strip(),
-                "point": pt.strip()
-            }
+        conn = sqlite3.connect(DB_NAME)
+        conn.execute("""
+        INSERT OR REPLACE INTO vocabs(word,pos,definition,example,point)
+        VALUES(?,?,?,?,?)
+        """, (w, "n.", d, ex, pt))
+        conn.commit()
+        conn.close()
 
-            res = requests.post(url, json=payload)
-
-            # =========================
-            # INSERT SQLITE（即時同步）
-            # =========================
-            conn = sqlite3.connect(DB_NAME)
-            conn.execute("""
-                INSERT OR REPLACE INTO vocabs(word,pos,definition,example,point)
-                VALUES(?,?,?,?,?)
-            """, (w, "n.", d, ex, pt))
-            conn.commit()
-            conn.close()
-
-            # =========================
-            # SUCCESS UI (APP LIKE)
-            # =========================
-            st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg,#22c55e,#16a34a);
-                padding:25px;
-                border-radius:20px;
-                color:white;
-                text-align:center;
-                animation: pop 0.4s ease;
-            ">
-                <h2>🎉 新增成功！</h2>
-                <h3>{w}</h3>
-                <p>{d}</p>
-            </div>
-
-            <style>
-            @keyframes pop {{
-                0% {{transform:scale(0.6); opacity:0;}}
-                100% {{transform:scale(1); opacity:1;}}
-            }}
-            </style>
-            """, unsafe_allow_html=True)
-
-            st.success("已同步到學習系統")
-
-        except Exception as e:
-            st.error(f"❌ 新增失敗：{e}")
-
-    # =========================
-    # LIVE PREVIEW
-    # =========================
-    st.markdown("### 👀 即時預覽")
-
-    if w:
-        st.markdown(f"""
-        <div style="
-            background:#111827;
-            padding:20px;
-            border-radius:15px;
-            color:white;
-        ">
-            <h3>{w}</h3>
-            <p>{d}</p>
-            <small>{ex}</small>
-        </div>
-        """, unsafe_allow_html=True)
+        st.success("新增成功 🎉")
