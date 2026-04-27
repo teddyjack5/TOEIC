@@ -91,6 +91,9 @@ def init_session():
         st.session_state.wrong_list = []
     if "selected" not in st.session_state:
         st.session_state.selected = None
+    # 🔥 新增：紀錄上一次的練習模式，解決切換不顯示問題
+    if "last_practice_mode" not in st.session_state:
+        st.session_state.last_practice_mode = ""
 
 # ==============================================================================
 # 同步與出題邏輯
@@ -182,7 +185,7 @@ def create_audio_button(text, button_text, theme_mode):
 # ==============================================================================
 # UI 與 主流程
 # ==============================================================================
-st.sidebar.title("設定")
+st.sidebar.title("🛠️ 設定")
 user_id = st.sidebar.text_input("User ID")
 mode = st.sidebar.radio("模式", ["測驗", "新增單字庫"])
 practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "錯題"])
@@ -195,12 +198,53 @@ if st.sidebar.button("同步單字"):
 init_session()
 auto_sync_logic()
 
+# 🔥 修正 Bug：偵測練習模式切換
+if st.session_state.last_practice_mode != practice_mode:
+    st.session_state.q = None
+    st.session_state.state = "q"
+    st.session_state.last_practice_mode = practice_mode
+
+# CSS 樣式優化
 card_bg = "#111827" if theme_mode == "深色" else "#ffffff"
-text_c = "white" if theme_mode == "深色" else "#1f2937"
-st.markdown(f"""<style>.card {{background:{card_bg}; padding:30px; border-radius:20px; text-align:center; margin-bottom:20px; box-shadow:0 4px 6px rgba(0,0,0,0.1);}} .big {{font-size:24px; color:{text_c}; font-weight:600; line-height:1.5;}} .banner-img {{width:100%; height:150px; object-fit:cover; border-radius:15px; margin-bottom:15px;}}</style>""", unsafe_allow_html=True)
+text_c = "white" if theme_mode == "深state" else "#1f2937"
+st.markdown(f"""
+<style>
+    .card {{
+        background:{card_bg}; 
+        padding:35px; 
+        border-radius:24px; 
+        text-align:center; 
+        margin-bottom:20px; 
+        box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);
+        border: 1px solid {'#374151' if theme_mode == "深色" else '#e5e7eb'};
+    }} 
+    .big {{
+        font-size:26px; 
+        color:{text_c}; 
+        font-weight:700; 
+        line-height:1.4;
+    }} 
+    .banner-img {{
+        width:100%; 
+        height:180px; 
+        object-fit:cover; 
+        border-radius:20px; 
+        margin-bottom:20px;
+    }}
+    h1 {{
+        text-align: center;
+        color: {text_c};
+    }}
+</style>
+""", unsafe_allow_html=True)
 
 if mode == "測驗":
     if not user_id: st.warning("請輸入User ID"); st.stop()
+    
+    # 🎨 UI 優化：標題與橫幅
+    st.title("🚀 TOEIC Pro 學習助手")
+    st.markdown('<img src="https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=800&q=80" class="banner-img">', unsafe_allow_html=True)
+    
     TOTAL = 10
     if st.session_state.q is None:
         if practice_mode == "填空": 
@@ -212,7 +256,7 @@ if mode == "測驗":
     if q is None: st.warning("目前沒有題目"); st.stop()
 
     st.progress(min(st.session_state.count / TOTAL, 1.0))
-    st.markdown(f"🏆 {st.session_state.score}　🔥 {st.session_state.streak}")
+    st.markdown(f"🏆 積分: **{st.session_state.score}**　🔥 連勝: **{st.session_state.streak}**")
     
     # 題目顯示邏輯
     if practice_mode == "填空":
@@ -223,42 +267,46 @@ if mode == "測驗":
     st.markdown(f'<div class="card"><div class="big">{display_text}</div></div>', unsafe_allow_html=True)
 
     if st.session_state.state == "q":
-        for opt in q["options"]:
-            if st.button(opt, use_container_width=True):
-                st.session_state.selected = opt
-                st.session_state.state = "result"
-                st.rerun()
+        # 優化按鈕排列（使用 columns 讓畫面不擁擠）
+        cols = st.columns(2)
+        for i, opt in enumerate(q["options"]):
+            with cols[i % 2]:
+                if st.button(opt, use_container_width=True, key=f"btn_{i}"):
+                    st.session_state.selected = opt
+                    st.session_state.state = "result"
+                    st.rerun()
     else:
         correct = q.get("answer") or q.get("correct")
         is_correct = st.session_state.selected == correct
         
         if is_correct:
-            st.success("✅ Correct")
+            st.success("✅ Correct! 太棒了！")
             st.session_state.score += 10; st.session_state.streak += 1
         else:
-            st.error(f"❌ {correct}")
+            st.error(f"❌ 錯誤。正確答案是: {correct}")
             st.session_state.wrong_list.append(q)
         
-        st.markdown("### 📌 解析")
+        st.markdown("### 📌 深度解析")
         st.write(f"**例句：** {q.get('example', '')}")
-        st.write(f"**重點：** {q.get('point', '')}")
+        st.write(f"**考點：** {q.get('point', '')}")
 
         col1, col2 = st.columns(2)
-        with col1: create_audio_button(q.get("word",""), "🔊 單字", theme_mode)
-        with col2: create_audio_button(q.get("example",""), "📢 例句", theme_mode)
+        with col1: create_audio_button(q.get("word",""), "🔊 單字發音", theme_mode)
+        with col2: create_audio_button(q.get("example",""), "📢 例句朗讀", theme_mode)
 
-        if st.button("下一題", type="primary", use_container_width=True):
+        if st.button("下一題 ➡️", type="primary", use_container_width=True):
             st.session_state.q = None; st.session_state.state = "q"; st.session_state.count += 1
             st.rerun()
 
 elif mode == "新增單字庫":
-    st.subheader("新增單字")
+    st.title("📝 管理單字庫")
+    st.subheader("新增單字內容")
     url = st.secrets["connections"]["gsheets"].get("script_url")
     with st.form("add"):
-        w = st.text_input("word")
-        d = st.text_input("definition")
-        ex = st.text_area("example")
-        pt = st.text_area("point")
-        if st.form_submit_button("送出"):
+        w = st.text_input("單字 (Word)")
+        d = st.text_input("定義 (Definition)")
+        ex = st.text_area("例句 (Example)")
+        pt = st.text_area("重點說明 (Point)")
+        if st.form_submit_button("確認送出"):
             requests.post(url, json={"method": "write", "word": w, "definition": d, "example": ex, "point": pt})
-            st.success("完成")
+            st.success("資料已成功上傳至 Google Sheets")
