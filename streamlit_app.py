@@ -38,10 +38,10 @@ init_db()
 # 工具函式：過濾中文
 # ==============================================================================
 def remove_chinese(text):
-    """使用正則表達式移除字串中的中文字元，只保留英文、數字與標點符號"""
+    """使用正則表達式移除字串中的中文字元"""
     if not text:
         return ""
-    # 匹配中文字元範圍 \u4e00-\u9fff
+    # 移除中文範圍字元
     return re.sub(r'[\u4e00-\u9fff]+', '', text).strip()
 
 # ==============================================================================
@@ -135,21 +135,29 @@ def get_cloze_question(user_id):
         FROM vocabs v LEFT JOIN user_progress p ON v.id = p.vocab_id AND p.user_id = ?
         WHERE v.example IS NOT NULL AND v.example != ''
     """, conn, params=(user_id,))
-    if df.empty: return None
+    
+    if df.empty: 
+        conn.close()
+        return None
+
+    # 權重隨機抽題
     df['weight'] = 1 + df['wrongs'] * 5 - df['streak'] * 1.5
     df['weight'] = df['weight'].clip(lower=0.1)
     target = df.sample(n=1, weights='weight').iloc[0]
     
     full_sentence = str(target['example'])
-    # 👈 關鍵修正：先移除句子中的中文，再做挖空處理
-    english_only_sentence = remove_chinese(full_sentence)
     word = str(target['word'])
-    blank_sentence = re.sub(re.escape(word), " ______ ", english_only_sentence, flags=re.IGNORECASE)
+    
+    # 🔥 核心修正：先在含有中文的句子中挖空，確保一定能挖成功
+    blanked = re.sub(re.escape(word), " ______ ", full_sentence, flags=re.IGNORECASE)
+    # 挖空後，再移除句子中的中文，確保題目是全英文
+    blank_sentence = remove_chinese(blanked)
     
     dist = pd.read_sql_query("SELECT word FROM vocabs WHERE word != ? ORDER BY RANDOM() LIMIT 3", conn, params=(word,))
     options = dist['word'].tolist() + [word]
     random.shuffle(options)
     conn.close()
+    
     return {
         "id": int(target["id"]), "sentence": blank_sentence, "answer": word,
         "options": options, "example": full_sentence, "point": target["point"], "word": word
@@ -157,7 +165,6 @@ def get_cloze_question(user_id):
 
 def create_audio_button(text, button_text, theme_mode):
     if not text: return
-    # 發音時也只保留英文部分
     clean_text = remove_chinese(text)
     clean_text = re.sub(r'[^a-zA-Z0-9\s\.,?!]', '', clean_text)
     try:
@@ -188,7 +195,6 @@ if st.sidebar.button("同步單字"):
 init_session()
 auto_sync_logic()
 
-# CSS 樣式
 card_bg = "#111827" if theme_mode == "深色" else "#ffffff"
 text_c = "white" if theme_mode == "深色" else "#1f2937"
 st.markdown(f"""<style>.card {{background:{card_bg}; padding:30px; border-radius:20px; text-align:center; margin-bottom:20px; box-shadow:0 4px 6px rgba(0,0,0,0.1);}} .big {{font-size:24px; color:{text_c}; font-weight:600; line-height:1.5;}} .banner-img {{width:100%; height:150px; object-fit:cover; border-radius:15px; margin-bottom:15px;}}</style>""", unsafe_allow_html=True)
@@ -197,8 +203,10 @@ if mode == "測驗":
     if not user_id: st.warning("請輸入User ID"); st.stop()
     TOTAL = 10
     if st.session_state.q is None:
-        if practice_mode == "填空": st.session_state.q = get_cloze_question(user_id)
-        else: st.session_state.q = get_weighted_question(user_id, practice_mode)
+        if practice_mode == "填空": 
+            st.session_state.q = get_cloze_question(user_id)
+        else: 
+            st.session_state.q = get_weighted_question(user_id, practice_mode)
 
     q = st.session_state.q
     if q is None: st.warning("目前沒有題目"); st.stop()
@@ -207,9 +215,8 @@ if mode == "測驗":
     st.markdown(f"🏆 {st.session_state.score}　🔥 {st.session_state.streak}")
     st.markdown('<img src="https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=800&q=80" class="banner-img">', unsafe_allow_html=True)
 
-    # 👈 決定題目顯示內容
     if practice_mode == "填空":
-        display_text = q.get("sentence", "") # 這裡的 sentence 已經過 remove_chinese 處理
+        display_text = q.get("sentence", "") 
     else:
         display_text = q.get("definition", "")
 
@@ -232,7 +239,6 @@ if mode == "測驗":
             st.error(f"❌ {correct}")
             st.session_state.wrong_list.append(q)
         
-        # 答題後的解析區塊 (顯示中文方便對照學習)
         st.markdown("### 📌 解析")
         st.write(f"**例句：** {q.get('example', '')}")
         st.write(f"**重點：** {q.get('point', '')}")
