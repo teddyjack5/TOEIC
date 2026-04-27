@@ -211,7 +211,7 @@ st.sidebar.title("設定")
 
 user_id = st.sidebar.text_input("User ID")
 mode = st.sidebar.radio("模式", ["測驗", "新增單字庫", "進度"])
-practice_mode = st.sidebar.selectbox("練習模式", ["全部", "錯題"])
+practice_mode = st.sidebar.selectbox("練習模式", ["全部", "填空", "錯題"])
 theme_mode = st.sidebar.radio("主題", ["深色","淺色"])
 
 if st.sidebar.button("同步單字"):
