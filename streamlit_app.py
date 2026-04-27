@@ -355,20 +355,102 @@ else:
         st.session_state.state = "q"
         st.rerun()
 # ==============================================================================
-# 新增單字
+# 新增單字（PRO UX VERSION）
 # ==============================================================================
 elif mode == "新增單字庫":
-    st.subheader("新增單字")
+    st.subheader("➕ 新增單字（Pro Mode）")
 
     url = st.secrets["connections"]["gsheets"].get("script_url")
 
-    with st.form("add"):
-        w = st.text_input("word")
-        d = st.text_input("definition")
-        ex = st.text_area("example")
-        pt = st.text_area("point")
+    # =========================
+    # FORM
+    # =========================
+    with st.form("add_word"):
+        w = st.text_input("英文單字")
+        d = st.text_input("中文定義")
+        ex = st.text_area("例句")
+        pt = st.text_area("考點")
 
-        if st.form_submit_button("送出"):
-            payload = {"word": w, "definition": d, "example": ex, "point": pt}
-            requests.post(url, json=payload)
-            st.success("完成")
+        submitted = st.form_submit_button("🚀 加入學習系統")
+
+    # =========================
+    # VALIDATION
+    # =========================
+    if submitted:
+
+        if not w or not d:
+            st.error("❌ 單字與定義不能為空")
+            st.stop()
+
+        # =========================
+        # INSERT GOOGLE SHEET
+        # =========================
+        try:
+            payload = {
+                "word": w.strip(),
+                "definition": d.strip(),
+                "example": ex.strip(),
+                "point": pt.strip()
+            }
+
+            res = requests.post(url, json=payload)
+
+            # =========================
+            # INSERT SQLITE（即時同步）
+            # =========================
+            conn = sqlite3.connect(DB_NAME)
+            conn.execute("""
+                INSERT OR REPLACE INTO vocabs(word,pos,definition,example,point)
+                VALUES(?,?,?,?,?)
+            """, (w, "n.", d, ex, pt))
+            conn.commit()
+            conn.close()
+
+            # =========================
+            # SUCCESS UI (APP LIKE)
+            # =========================
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg,#22c55e,#16a34a);
+                padding:25px;
+                border-radius:20px;
+                color:white;
+                text-align:center;
+                animation: pop 0.4s ease;
+            ">
+                <h2>🎉 新增成功！</h2>
+                <h3>{w}</h3>
+                <p>{d}</p>
+            </div>
+
+            <style>
+            @keyframes pop {{
+                0% {{transform:scale(0.6); opacity:0;}}
+                100% {{transform:scale(1); opacity:1;}}
+            }}
+            </style>
+            """, unsafe_allow_html=True)
+
+            st.success("已同步到學習系統")
+
+        except Exception as e:
+            st.error(f"❌ 新增失敗：{e}")
+
+    # =========================
+    # LIVE PREVIEW
+    # =========================
+    st.markdown("### 👀 即時預覽")
+
+    if w:
+        st.markdown(f"""
+        <div style="
+            background:#111827;
+            padding:20px;
+            border-radius:15px;
+            color:white;
+        ">
+            <h3>{w}</h3>
+            <p>{d}</p>
+            <small>{ex}</small>
+        </div>
+        """, unsafe_allow_html=True)
