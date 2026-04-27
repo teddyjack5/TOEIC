@@ -252,11 +252,40 @@ if mode == "測驗":
             st.error(f"❌ {correct}")
             st.session_state.streak = 0
 
-        # 解釋
-        st.markdown(f"""
-        <div class="card">
-            <div style="color:#9CA3AF;">{q['point']}</div><br>
-            <div style="color:white;">{q['example']}</div>
+        # =========================
+        # 📌 重點區塊
+        # =========================
+        st.markdown("""
+        <div style="
+            background:#1F2937;
+            padding:18px;
+            border-radius:16px;
+            margin-top:15px;
+        ">
+            <div style="color:#60A5FA; font-size:14px; margin-bottom:8px;">
+                📌 考點重點
+            </div>
+            <div style="color:white; font-size:16px;">
+                """ + str(q['point']) + """
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        # =========================
+        # 💡 例句區塊
+        # =========================
+        st.markdown("""
+        <div style="
+            background:#111827;
+            padding:18px;
+            border-radius:16px;
+            margin-top:12px;
+        ">
+            <div style="color:#34D399; font-size:14px; margin-bottom:8px;">
+                💡 例句
+            </div>
+            <div style="color:white; font-size:16px; line-height:1.6;">
+                """ + str(q['example']) + """
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
