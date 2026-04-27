@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
+import plotly.express as px
 import sqlite3
 import random
 import re
@@ -419,8 +420,8 @@ elif mode == "學習進度分析":
                 
             except Exception as e:
                 # 如果還是出現警告，請暫時把這行改為 st.error(f"Debug: {e}") 來看具體報錯
-                #st.warning("📊 圖表數據整理中，請稍後...")
-                st.error(f"Debug: {e}")
+                st.warning("📊 圖表數據整理中，請稍後...")
+                #st.error(f"Debug: {e}")
 
         # C. 詳細列表：美化 Dataframe
         with st.expander("📂 查看詳細單字掌握度"):
