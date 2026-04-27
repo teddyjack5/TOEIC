@@ -268,10 +268,60 @@ if mode == "測驗":
 
         # 下一題
         if st.button("➡️ 下一題"):
+
+            if st.session_state.count >= TOTAL:
+                st.session_state.state = "done"
+                st.rerun()
+
             st.session_state.q = get_weighted_question(user_id, practice_mode)
             st.session_state.state = "q"
             st.session_state.count += 1
             st.rerun()
+
+if st.session_state.state == "done":
+
+    total = st.session_state.count
+    wrongs = len(st.session_state.wrong_list)
+    correct = total - wrongs
+
+    acc = int((correct / total) * 100)
+
+    st.markdown("## 🎉 今日完成！")
+
+    st.metric("正確率", f"{acc}%")
+    st.metric("答對", correct)
+    st.metric("錯題", wrongs)
+
+    # 評語系統
+    if acc >= 90:
+        st.success("🔥 太猛了！已進入高強度記憶區")
+    elif acc >= 70:
+        st.info("👍 不錯，建議複習錯題")
+    else:
+        st.warning("📌 建議重新做錯題加強記憶")
+
+    # 錯題回顧入口
+    if wrongs > 0:
+        st.markdown("## 📚 錯題回顧")
+
+        for i, q in enumerate(st.session_state.wrong_list):
+            with st.expander(f"{i+1}. {q['word']}"):
+                st.write("📖", q['definition'])
+                st.write("💡", q['example'])
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    create_audio_button(q['word'], "🔊 單字", theme_mode)
+                with col2:
+                    create_audio_button(q['example'], "📢 例句", theme_mode)
+
+    # 重來按鈕
+    if st.button("🔁 再挑戰一次"):
+        st.session_state.q = None
+        st.session_state.state = "q"
+        st.session_state.count = 1
+        st.session_state.wrong_list = []
+        st.rerun()
 
 # ==============================================================================
 # 新增單字
