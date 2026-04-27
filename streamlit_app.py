@@ -20,17 +20,39 @@ DB_NAME = "toeic_pro.db"
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+
     c.execute('''CREATE TABLE IF NOT EXISTS vocabs 
                  (id INTEGER PRIMARY KEY, word TEXT UNIQUE, pos TEXT, 
                   definition TEXT, example TEXT, point TEXT)''')
+
     c.execute('''CREATE TABLE IF NOT EXISTS user_progress 
                  (user_id TEXT, vocab_id INTEGER, wrong_count INTEGER DEFAULT 0, 
                   correct_streak INTEGER DEFAULT 0, last_tested TIMESTAMP,
                   PRIMARY KEY (user_id, vocab_id))''')
+
     conn.commit()
     conn.close()
 
 init_db()
+
+# ==============================================================================
+# SESSION SAFE INIT（🔥 修正核心）
+# ==============================================================================
+def init_session():
+    if "state" not in st.session_state:
+        st.session_state.state = "q"
+    if "score" not in st.session_state:
+        st.session_state.score = 0
+    if "streak" not in st.session_state:
+        st.session_state.streak = 0
+    if "count" not in st.session_state:
+        st.session_state.count = 1
+    if "q" not in st.session_state:
+        st.session_state.q = None
+    if "wrong_list" not in st.session_state:
+        st.session_state.wrong_list = []
+    if "selected" not in st.session_state:
+        st.session_state.selected = None
 
 # ==============================================================================
 # 同步
@@ -48,27 +70,6 @@ def sync_data():
 
     conn_db.commit()
     conn_db.close()
-
-# ==============================================================================
-# 更新進度
-# ==============================================================================
-def update_progress(user_id, vocab_id, is_correct):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-
-    if is_correct:
-        c.execute('''INSERT INTO user_progress 
-        VALUES (?, ?, 0, 1, CURRENT_TIMESTAMP)
-        ON CONFLICT(user_id, vocab_id) DO UPDATE SET 
-        correct_streak = correct_streak + 1''', (user_id, vocab_id))
-    else:
-        c.execute('''INSERT INTO user_progress 
-        VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
-        ON CONFLICT(user_id, vocab_id) DO UPDATE SET 
-        wrong_count = wrong_count + 1, correct_streak = 0''', (user_id, vocab_id))
-
-    conn.commit()
-    conn.close()
 
 # ==============================================================================
 # 出題（單字）
@@ -206,26 +207,18 @@ def create_audio_button(text, button_text, theme_mode):
 st.sidebar.title("設定")
 
 user_id = st.sidebar.text_input("User ID")
-mode = st.sidebar.radio("模式", ["測驗", "新增單字庫", "進度"])
+mode = st.sidebar.radio("模式", ["測驗", "新增單字庫"])
 practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "錯題"])
 theme_mode = st.sidebar.radio("主題", ["深色","淺色"])
-
-# 🔥 修正重點：鎖定 practice_mode（避免 rerun 亂跳）
-if "practice_mode" not in st.session_state:
-    st.session_state.practice_mode = practice_mode
-st.session_state.practice_mode = practice_mode
-
-if "last_mode" not in st.session_state:
-    st.session_state.last_mode = practice_mode
-
-if st.session_state.last_mode != practice_mode:
-    st.session_state.q = None
-    st.session_state.state = "q"
-    st.session_state.last_mode = practice_mode
 
 if st.sidebar.button("同步單字"):
     sync_data()
     st.sidebar.success("完成")
+
+# ==============================================================================
+# INIT SESSION
+# ==============================================================================
+init_session()
 
 # ==============================================================================
 # CSS
@@ -240,12 +233,6 @@ st.markdown("""
     margin-bottom:20px;
 }
 .big {font-size:24px;color:white;}
-.stButton button {
-    width:100%;
-    height:55px;
-    font-size:18px;
-    border-radius:12px;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -258,20 +245,12 @@ if mode == "測驗":
         st.warning("請輸入User ID")
         st.stop()
 
-    if "state" not in st.session_state:
-        st.session_state.state = "q"
-        st.session_state.score = 0
-        st.session_state.streak = 0
-        st.session_state.count = 1
-        st.session_state.q = None
-        st.session_state.wrong_list = []
-
     TOTAL = 10
 
-    # 🔥 核心修正：用 session_state.practice_mode
+    # 出題
     if st.session_state.q is None:
 
-        if st.session_state.practice_mode == "填空":
+        if practice_mode == "填空":
             st.session_state.q = get_cloze_question(user_id)
         else:
             st.session_state.q = get_weighted_question(user_id, practice_mode)
@@ -282,13 +261,12 @@ if mode == "測驗":
         st.warning("目前沒有題目")
         st.stop()
 
-    st.progress(min(st.session_state.count / TOTAL, 1.0))
+    # progress（🔥 safe）
+    st.progress(min(st.session_state.get("count", 1) / TOTAL, 1.0))
+
     st.markdown(f"🏆 {st.session_state.score}　🔥 {st.session_state.streak}")
 
-    if st.session_state.practice_mode == "填空":
-        display_text = q.get("sentence", "")
-    else:
-        display_text = q["definition"]
+    display_text = q.get("sentence", q.get("definition", ""))
 
     st.markdown(f"""
     <div class="card">
@@ -296,6 +274,7 @@ if mode == "測驗":
     </div>
     """, unsafe_allow_html=True)
 
+    # 作答
     if st.session_state.state == "q":
 
         for opt in q["options"]:
@@ -306,7 +285,7 @@ if mode == "測驗":
 
     else:
 
-        correct = q["answer"] if st.session_state.practice_mode == "填空" else q["correct"]
+        correct = q.get("answer") or q.get("correct")
         selected = st.session_state.selected
         is_correct = selected == correct
 
@@ -319,15 +298,10 @@ if mode == "測驗":
             st.session_state.streak += 1
         else:
             st.error(f"❌ {correct}")
-            st.session_state.streak = 0
 
-        st.markdown("### 📊 Result")
-
-        with st.expander("💡 例句"):
-            st.write(q.get("example", ""))
-
-        with st.expander("📌 考點"):
-            st.write(q.get("point", ""))
+        st.markdown("### 📌 解析")
+        st.write(q.get("example", ""))
+        st.write(q.get("point", ""))
 
         col1, col2 = st.columns(2)
         with col1:
@@ -335,11 +309,7 @@ if mode == "測驗":
         with col2:
             create_audio_button(q.get("example",""), "📢 例句", theme_mode)
 
-        if st.button("➡️ 下一題"):
-
-            if st.session_state.count >= TOTAL:
-                st.session_state.state = "done"
-                st.rerun()
+        if st.button("下一題"):
 
             st.session_state.q = None
             st.session_state.state = "q"
@@ -347,27 +317,10 @@ if mode == "測驗":
             st.rerun()
 
 # ==============================================================================
-# 完成畫面
-# ==============================================================================
-if st.session_state.get("state") == "done":
-
-    total = st.session_state.count
-    wrongs = len(st.session_state.wrong_list)
-    correct = total - wrongs
-    acc = int((correct / total) * 100)
-
-    st.markdown("## 🎉 完成")
-
-    st.metric("正確率", f"{acc}%")
-
-    if st.button("重新開始"):
-        st.session_state.clear()
-        st.rerun()
-
-# ==============================================================================
 # 新增單字
 # ==============================================================================
 elif mode == "新增單字庫":
+
     st.subheader("新增單字")
 
     url = st.secrets["connections"]["gsheets"].get("script_url")
