@@ -71,7 +71,7 @@ def update_progress(user_id, vocab_id, is_correct):
     conn.close()
 
 # ==============================================================================
-# 出題
+# 出題（單字）
 # ==============================================================================
 def get_weighted_question(user_id, practice_mode):
     conn = sqlite3.connect(DB_NAME)
@@ -87,7 +87,6 @@ def get_weighted_question(user_id, practice_mode):
     if df.empty:
         return None
 
-    # 🔥 錯題模式
     if practice_mode == "錯題":
         df = df[df['wrongs'] > 0]
         if df.empty:
@@ -120,6 +119,9 @@ def get_weighted_question(user_id, practice_mode):
         "correct": target['word']
     }
 
+# ==============================================================================
+# 出題（填空）
+# ==============================================================================
 def get_cloze_question(user_id):
     conn = sqlite3.connect(DB_NAME)
 
@@ -144,15 +146,8 @@ def get_cloze_question(user_id):
     sentence = str(target['example'])
     word = str(target['word'])
 
-    # 🔥 把單字挖空
-    blank_sentence = re.sub(
-        re.escape(word),
-        " ______ ",
-        sentence,
-        flags=re.IGNORECASE
-    )
+    blank_sentence = re.sub(re.escape(word), " ______ ", sentence, flags=re.IGNORECASE)
 
-    # 干擾選項（同詞性比較合理）
     dist = pd.read_sql_query("""
         SELECT word FROM vocabs
         WHERE word != ? AND pos = ?
@@ -170,11 +165,12 @@ def get_cloze_question(user_id):
         "answer": word,
         "options": options,
         "example": sentence,
-        "point": target["point"]
+        "point": target["point"],
+        "word": word
     }
 
 # ==============================================================================
-# 發音（iOS適用）
+# 發音
 # ==============================================================================
 def create_audio_button(text, button_text, theme_mode):
     if not text:
@@ -214,6 +210,19 @@ mode = st.sidebar.radio("模式", ["測驗", "新增單字庫", "進度"])
 practice_mode = st.sidebar.selectbox("練習模式", ["全部", "填空", "錯題"])
 theme_mode = st.sidebar.radio("主題", ["深色","淺色"])
 
+# 🔥 修正重點：鎖定 practice_mode（避免 rerun 亂跳）
+if "practice_mode" not in st.session_state:
+    st.session_state.practice_mode = practice_mode
+st.session_state.practice_mode = practice_mode
+
+if "last_mode" not in st.session_state:
+    st.session_state.last_mode = practice_mode
+
+if st.session_state.last_mode != practice_mode:
+    st.session_state.q = None
+    st.session_state.state = "q"
+    st.session_state.last_mode = practice_mode
+
 if st.sidebar.button("同步單字"):
     sync_data()
     st.sidebar.success("完成")
@@ -249,9 +258,6 @@ if mode == "測驗":
         st.warning("請輸入User ID")
         st.stop()
 
-    # =========================
-    # Session State 初始化
-    # =========================
     if "state" not in st.session_state:
         st.session_state.state = "q"
         st.session_state.score = 0
@@ -262,12 +268,10 @@ if mode == "測驗":
 
     TOTAL = 10
 
-    # =========================
-    # 出題（🔥 已整合 Cloze）
-    # =========================
+    # 🔥 核心修正：用 session_state.practice_mode
     if st.session_state.q is None:
 
-        if practice_mode == "填空":
+        if st.session_state.practice_mode == "填空":
             st.session_state.q = get_cloze_question(user_id)
         else:
             st.session_state.q = get_weighted_question(user_id, practice_mode)
@@ -278,18 +282,11 @@ if mode == "測驗":
         st.warning("目前沒有題目")
         st.stop()
 
-    # =========================
-    # 進度條
-    # =========================
     st.progress(min(st.session_state.count / TOTAL, 1.0))
-
     st.markdown(f"🏆 {st.session_state.score}　🔥 {st.session_state.streak}")
 
-    # =========================
-    # 題目顯示（🔥 Cloze / 單字統一）
-    # =========================
-    if practice_mode == "填空":
-        display_text = q.get("sentence", q.get("definition", ""))
+    if st.session_state.practice_mode == "填空":
+        display_text = q.get("sentence", "")
     else:
         display_text = q["definition"]
 
@@ -299,41 +296,23 @@ if mode == "測驗":
     </div>
     """, unsafe_allow_html=True)
 
-    # =========================
-    # 作答
-    # =========================
     if st.session_state.state == "q":
 
         for opt in q["options"]:
             if st.button(opt):
-
                 st.session_state.selected = opt
                 st.session_state.state = "result"
                 st.rerun()
 
-    # =========================
-    # 結果畫面
-    # =========================
     else:
 
-        # -------------------------
-        # 正確答案統一處理
-        # -------------------------
-        if practice_mode == "填空":
-            correct = q["answer"]
-        else:
-            correct = q["correct"]
-
+        correct = q["answer"] if st.session_state.practice_mode == "填空" else q["correct"]
         selected = st.session_state.selected
         is_correct = selected == correct
 
-        # =========================
-        # 錯題紀錄（🔥 修好）
-        # =========================
         if not is_correct:
             st.session_state.wrong_list.append(q)
 
-        # update score
         if is_correct:
             st.success("✅ Correct")
             st.session_state.score += 10
@@ -342,138 +321,47 @@ if mode == "測驗":
             st.error(f"❌ {correct}")
             st.session_state.streak = 0
 
-        # =========================
-        # 結果卡片
-        # =========================
-        st.markdown("### 📊 Answer Result")
+        st.markdown("### 📊 Result")
 
-        st.markdown(f"""
-        <div style="
-            background:#111827;
-            padding:18px;
-            border-radius:15px;
-            color:white;
-            text-align:center;
-        ">
-            {'🎉 正確！' if is_correct else '📌 再加油'}
-        </div>
-        """, unsafe_allow_html=True)
+        with st.expander("💡 例句"):
+            st.write(q.get("example", ""))
 
-        # =========================
-        # 📖 例句（分離）
-        # =========================
-        with st.expander("💡 查看例句", expanded=False):
-            st.markdown(f"""
-            <div style="
-                background:#1F2937;
-                padding:15px;
-                border-radius:12px;
-                color:white;
-            ">
-                {q.get("example", "")}
-            </div>
-            """, unsafe_allow_html=True)
-
-        # =========================
-        # 📌 考點
-        # =========================
-        with st.expander("📌 查看考點", expanded=False):
-            st.markdown(f"""
-            <div style="
-                background:#0F172A;
-                padding:15px;
-                border-radius:12px;
-                color:white;
-            ">
-                {q.get("point", "")}
-            </div>
-            """, unsafe_allow_html=True)
-
-        # =========================
-        # 🔊 發音
-        # =========================
-        st.markdown("### 🔊 發音")
+        with st.expander("📌 考點"):
+            st.write(q.get("point", ""))
 
         col1, col2 = st.columns(2)
-
         with col1:
-            create_audio_button(q.get("word", ""), "🔊 單字", theme_mode)
-
+            create_audio_button(q.get("word",""), "🔊 單字", theme_mode)
         with col2:
-            create_audio_button(q.get("example", ""), "📢 例句", theme_mode)
+            create_audio_button(q.get("example",""), "📢 例句", theme_mode)
 
-        # =========================
-        # 下一題
-        # =========================
         if st.button("➡️ 下一題"):
 
             if st.session_state.count >= TOTAL:
                 st.session_state.state = "done"
                 st.rerun()
 
-            # reset
             st.session_state.q = None
             st.session_state.state = "q"
             st.session_state.count += 1
             st.rerun()
 
-
-# =========================
-# 🎯 完成畫面
-# =========================
+# ==============================================================================
+# 完成畫面
+# ==============================================================================
 if st.session_state.get("state") == "done":
 
     total = st.session_state.count
     wrongs = len(st.session_state.wrong_list)
     correct = total - wrongs
-
     acc = int((correct / total) * 100)
 
-    st.markdown("## 🎉 測驗完成！")
+    st.markdown("## 🎉 完成")
 
     st.metric("正確率", f"{acc}%")
-    st.metric("答對", correct)
-    st.metric("錯題", wrongs)
 
-    # 評語
-    if acc >= 90:
-        st.success("🔥 太強了！")
-    elif acc >= 70:
-        st.info("👍 不錯，建議複習錯題")
-    else:
-        st.warning("📌 建議加強複習")
-
-    # =========================
-    # 錯題回顧
-    # =========================
-    if wrongs > 0:
-        st.markdown("## 📚 錯題回顧")
-
-        for i, item in enumerate(st.session_state.wrong_list):
-
-            with st.expander(f"{i+1}. {item.get('word','')}"):
-
-                st.write("📖", item.get("definition", ""))
-                st.write("💡", item.get("example", ""))
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    create_audio_button(item.get("word", ""), "🔊 單字", theme_mode)
-
-                with col2:
-                    create_audio_button(item.get("example", ""), "📢 例句", theme_mode)
-
-    # restart
-    if st.button("🔁 再挑戰一次"):
-
-        st.session_state.state = "q"
-        st.session_state.score = 0
-        st.session_state.streak = 0
-        st.session_state.count = 1
-        st.session_state.q = None
-        st.session_state.wrong_list = []
-
+    if st.button("重新開始"):
+        st.session_state.clear()
         st.rerun()
 
 # ==============================================================================
