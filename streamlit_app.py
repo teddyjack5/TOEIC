@@ -206,6 +206,9 @@ if mode == "測驗":
     if st.session_state.q is None:
         st.session_state.q = get_weighted_question(user_id, practice_mode)
 
+    if "wrong_list" not in st.session_state:
+    st.session_state.wrong_list = []
+
     q = st.session_state.q
 
     if q is None:
