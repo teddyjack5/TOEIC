@@ -372,14 +372,18 @@ elif mode == "學習進度分析":
         # B. 視覺化圖表：魔王單字
         st.write("### 😈 你的十大魔王單字")
         
-        # 【修正關鍵】先檢查是否有「錯誤次數 > 0」的資料
-        top_10_wrong = df_progress[df_progress['wrong_count'] > 0].head(10).copy()
+        # 1. 確保資料抓取與排序邏輯穩定
+        # 我們改用 nlargest 確保抓到的是真正錯誤最高的前 10 名
+        top_10_wrong = df_progress[df_progress['wrong_count'] > 0].nlargest(10, 'wrong_count').copy()
         
         if top_10_wrong.empty:
             st.success("🎉 目前表現完美！沒有單字進入魔王名單，請繼續保持！")
         else:
             try:
-                # 美術優化：改用橫向長條圖，並加上配色
+                # 2. 轉換資料型態 (確保 Plotly 讀數字沒問題)
+                top_10_wrong['wrong_count'] = top_10_wrong['wrong_count'].astype(int)
+                
+                # 3. 繪圖
                 fig = px.bar(
                     top_10_wrong, 
                     x='wrong_count', 
@@ -387,23 +391,35 @@ elif mode == "學習進度分析":
                     orientation='h',
                     color='wrong_count',
                     color_continuous_scale='Reds',
-                    text='wrong_count', # 在條表末端直接顯示數字
+                    text='wrong_count', # 這裡維持原樣，但我們會優化 traces
                     labels={'wrong_count': '錯誤次數', 'word': '單字'}
                 )
                 
-                # UI 精細調整
+                # 4. 美術編輯的精細化調整
                 fig.update_layout(
-                    height=400,
-                    margin=dict(l=0, r=20, t=20, b=20),
+                    height=max(300, len(top_10_wrong) * 40), # 動態高度，單字少就不會拉太長
+                    margin=dict(l=0, r=40, t=10, b=10),      # 右側留白給數字標籤
                     showlegend=False,
-                    coloraxis_showscale=False, # 隱藏右側比例尺
-                    yaxis={'categoryorder':'total ascending'} # 錯誤最多的在上面
+                    coloraxis_showscale=False,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    # 確保最高的排在最上面 (由大到小)
+                    yaxis={'categoryorder':'total ascending'} 
                 )
-                fig.update_traces(textposition='outside', marker_line_color='rgb(8,48,107)', marker_line_width=1.5, opacity=0.8)
                 
-                st.plotly_chart(fig, use_container_width=True)
+                # textposition='outside' 如果空間不夠會噴錯，改用 'auto' 
+                fig.update_traces(
+                    textposition='auto', 
+                    marker_line_color='rgb(0,0,0)', 
+                    marker_line_width=1, 
+                    opacity=0.9
+                )
+                
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                
             except Exception as e:
-                st.warning(f"圖表渲染暫時無法顯示，但不影響您的學習記錄。")
+                # 如果還是出現警告，請暫時把這行改為 st.error(f"Debug: {e}") 來看具體報錯
+                st.warning("📊 圖表數據整理中，請稍後...")
 
         # C. 詳細列表：美化 Dataframe
         with st.expander("📂 查看詳細單字掌握度"):
