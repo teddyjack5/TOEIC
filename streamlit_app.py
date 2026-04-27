@@ -338,6 +338,8 @@ elif mode == "新增單字庫":
 
 # --- 模式 3：學習進度分析 ---
 elif mode == "學習進度分析":
+    # 增加一點上下間距，讓標題不那麼擁擠
+    st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📊 我的學習戰報")
     
     conn = sqlite3.connect(DB_NAME)
@@ -353,28 +355,85 @@ elif mode == "學習進度分析":
     conn.close()
 
     if df_progress.empty:
-        st.info("目前還沒有測驗紀錄，快去「開始測驗」挑戰看看吧！")
+        st.info("💡 目前還沒有測驗紀錄，快去「開始測驗」挑戰看看吧！")
     else:
-        # A. 頂部儀表板
+        # A. 頂部儀表板 (Metrics)
+        # 用一個視覺化的區塊包裝起來
+        st.markdown("""
+            <style>
+            div[data-testid="metric-container"] {
+                background-color: #262730;
+                border: 1px solid #444;
+                padding: 5% 5% 5% 10%;
+                border-radius: 10px;
+                box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("已練習單字數", len(df_progress))
+            st.metric("📖 已練習單字數", len(df_progress))
         with col2:
             # 假設連續正確 3 次以上算「熟練」
             mastered_count = len(df_progress[df_progress['correct_streak'] >= 3])
-            st.metric("精通單字量 (Streak >= 3)", mastered_count)
+            st.metric("👑 精通單字量 (Streak ≥ 3)", mastered_count)
         with col3:
             total_wrongs = df_progress['wrong_count'].sum()
-            st.metric("累計錯誤次數", int(total_wrongs))
+            st.metric("💥 累計錯誤次數", int(total_wrongs))
+
+        st.markdown("<hr style='border: 1px solid #444;'>", unsafe_allow_html=True)
 
         # B. 視覺化圖表 (簡單展示前 10 名「魔王單字」)
-        st.write("### 😈 你的十大魔王單字 (錯誤次數最多)")
-        top_10_wrong = df_progress.head(10)
-        st.bar_chart(data=top_10_wrong, x='word', y='wrong_count', color="#FF4B4B")
+        st.write("### 😈 你的十大魔王單字")
+        
+        # 【UX 優化】防呆機制：如果根本沒有錯題，就不要顯示空圖表
+        top_10_wrong = df_progress[df_progress['wrong_count'] > 0].head(10)
+        
+        if top_10_wrong.empty:
+            st.success("🎉 太神啦！目前沒有任何答錯的單字，請繼續保持這個完美的紀錄！")
+        else:
+            # 【UI 優化】改用 Plotly 繪製，顏色漸層、Hover 效果更好
+            fig = px.bar(
+                top_10_wrong, 
+                x='wrong_count', 
+                y='word', 
+                orientation='h', # 橫向長條圖，單字再長也不會擠在一起
+                color='wrong_count',
+                color_continuous_scale=px.colors.sequential.Reds,
+                labels={'wrong_count': '錯誤次數', 'word': '單字'}
+            )
+            fig.update_layout(
+                margin=dict(l=0, r=0, t=10, b=0),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                xaxis_title=None,
+                yaxis_title=None,
+                yaxis={'categoryorder':'total ascending'} # 最容易錯的排最上面
+            )
+            # 隱藏右側的顏色比例尺，保持版面乾淨
+            fig.update_coloraxes(showscale=False)
+            st.plotly_chart(fig, use_container_width=True)
 
         # C. 詳細列表
-        with st.expander("詳細單字掌握度清單"):
-            # 格式化時間與呈現
+        with st.expander("📂 詳細單字掌握度清單"):
             df_display = df_progress.copy()
             df_display.columns = ['單字', '定義', '錯誤次數', '連對次數', '最後測驗時間']
-            st.dataframe(df_display, use_container_width=True)
+            
+            # 【UI 優化】利用 Streamlit 的 column_config 讓表格變生動
+            st.dataframe(
+                df_display,
+                column_config={
+                    "單字": st.column_config.TextColumn("單字", width="medium"),
+                    "錯誤次數": st.column_config.NumberColumn("錯誤次數 ❌"),
+                    "連對次數": st.column_config.ProgressColumn(
+                        "熟練度 (連對次數) 🔥", 
+                        help="連續答對 3 次視為精通", 
+                        format="%d", 
+                        min_value=0, 
+                        max_value=3 # 這裡的 max_value 設定為精通的門檻
+                    ),
+                },
+                hide_index=True, # 隱藏最左邊沒有意義的 0, 1, 2, 3 索引
+                use_container_width=True
+            )
