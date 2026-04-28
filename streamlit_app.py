@@ -31,6 +31,9 @@ def init_db():
                  (user_id TEXT, vocab_id INTEGER, wrong_count INTEGER DEFAULT 0, 
                   correct_streak INTEGER DEFAULT 0, last_tested TIMESTAMP,
                   PRIMARY KEY (user_id, vocab_id))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS sync_meta
+                 (id INTEGER PRIMARY KEY CHECK(id=1),
+                  last_sync_week TEXT)''')
     try:
         c.execute("ALTER TABLE user_progress ADD COLUMN next_review TIMESTAMP")
     except:
@@ -50,7 +53,7 @@ def init_db():
     conn.close()
     
 init_db()
-
+auto_sync_monday()
 # ==============================================================================
 # SESSION SAFE INIT（🔥 修正核心）
 # ==============================================================================
@@ -82,16 +85,62 @@ def init_session():
 def sync_data():
     conn_gs = st.connection("gsheets", type=GSheetsConnection)
     df_gs = conn_gs.read()
+
     conn_db = sqlite3.connect(DB_NAME)
+    c = conn_db.cursor()
 
     for _, row in df_gs.iterrows():
-        conn_db.execute('''INSERT OR REPLACE INTO vocabs 
-        (word, pos, definition, example, point)
-        VALUES (?, ?, ?, ?, ?)''', 
-        (row['word'], row['pos'], row['definition'], row['example'], row['point']))
+
+        c.execute("""
+        INSERT INTO vocabs (word, pos, definition, example, point)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(word) DO UPDATE SET
+            pos=excluded.pos,
+            definition=excluded.definition,
+            example=excluded.example,
+            point=excluded.point
+        """, (
+            row['word'],
+            row['pos'],
+            row['definition'],
+            row['example'],
+            row['point']
+        ))
 
     conn_db.commit()
     conn_db.close()
+
+def auto_sync_monday():
+    today = datetime.date.today()
+    week_id = today.strftime("%Y-%W")  # 第幾週
+    weekday = today.weekday()  # 0 = Monday
+
+    if weekday != 0:
+        return  # 不是週一 → 不做事
+
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+
+    row = c.execute("""
+        SELECT last_sync_week FROM sync_meta WHERE id=1
+    """).fetchone()
+
+    last_week = row[0] if row else None
+
+    if last_week != week_id:
+        sync_data()
+
+        c.execute("""
+            INSERT INTO sync_meta (id, last_sync_week)
+            VALUES (1, ?)
+            ON CONFLICT(id) DO UPDATE SET last_sync_week=excluded.last_sync_week
+        """, (week_id,))
+
+        conn.commit()
+
+        st.success(f"✅ 每週同步完成：{week_id}")
+
+    conn.close()
 
 # ==============================================================================
 # 出題（單字/填空邏輯維持不變）
