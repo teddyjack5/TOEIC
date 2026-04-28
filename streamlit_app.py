@@ -251,7 +251,7 @@ def get_recall_question(user_id):
 # ==============================================================================
 st.sidebar.title("設定")
 user_id = st.sidebar.text_input("User ID")
-mode = st.sidebar.radio("模式", ["測驗", "學習進度分析", "新增單字庫","🧠 記憶強化","🔁 今日複習"]) # 新增分析選項
+mode = st.sidebar.radio("模式", ["測驗", "學習進度分析","🧠 記憶強化","🔁 今日複習", "新增單字庫"]) # 新增分析選項
 old_practice_mode = st.session_state.get("last_practice_mode")
 practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "錯題"])
 if old_practice_mode != practice_mode:
@@ -446,33 +446,40 @@ elif mode == "🧠 記憶強化":
     </div>
     """, unsafe_allow_html=True)
 
-    user_input = st.text_input("請輸入英文單字（Recall）")
+    user_input = st.text_input(
+    "請輸入英文單字（Recall）",
+    key="recall_input"
+)
 
-    if st.button("提交"):
+if st.button("提交"):
 
-        correct = user_input.strip().lower() == q["answer"].lower()
+    correct = user_input.strip().lower() == q["answer"].lower()
 
-        conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME)
 
-        if correct:
-            st.success("🎉 正確！記憶加深")
-            conn.execute("""
-                INSERT INTO user_progress (user_id, vocab_id, correct_streak, last_tested)
-                VALUES (?, ?, 1, CURRENT_TIMESTAMP)
-                ON CONFLICT(user_id, vocab_id)
-                DO UPDATE SET correct_streak = correct_streak + 2
-            """, (user_id, q["id"]))
-        else:
-            st.error(f"❌ 正確答案：{q['answer']}")
-            conn.execute("""
-                INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
-                VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
-                ON CONFLICT(user_id, vocab_id)
-                DO UPDATE SET wrong_count = wrong_count + 2, correct_streak = 0
-            """, (user_id, q["id"]))
+    if correct:
+        st.success("🎉 正確！記憶加深")
+        conn.execute("""
+            INSERT INTO user_progress (user_id, vocab_id, correct_streak, last_tested)
+            VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, vocab_id)
+            DO UPDATE SET correct_streak = correct_streak + 2
+        """, (user_id, q["id"]))
+    else:
+        st.error(f"❌ 正確答案：{q['answer']}")
+        conn.execute("""
+            INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
+            VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, vocab_id)
+            DO UPDATE SET wrong_count = wrong_count + 2, correct_streak = 0
+        """, (user_id, q["id"]))
 
-        conn.commit()
-        conn.close()
+    conn.commit()
+    conn.close()
+
+    # ✅ 關鍵：清空輸入框
+    st.session_state.recall_input = ""
+    st.rerun()
 
     st.markdown("### 📌 例句")
     st.write(q.get("example", ""))
