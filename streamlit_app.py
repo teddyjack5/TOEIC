@@ -209,7 +209,7 @@ def create_audio_button(text, button_text, theme_mode):
         </button>
         """
 
-        components.html(html_code, height=50))
+        components.html(html_code, height=50)
 
 def create_action_button(label, key):
     html_code = f"""
