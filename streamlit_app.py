@@ -366,115 +366,199 @@ init_session()
 # ==============================================================================
 # CSS
 # ==============================================================================
-st.markdown("""
-<style>
+# ==============================================================================
+# CSS（✔ 修正：深色 / 淺色模式切換）
+# ==============================================================================
 
-/* ===== 背景微動畫 ===== */
-body {
-    background: radial-gradient(circle at top, #0f172a, #020617);
-}
+if theme_mode == "深色":
 
-/* ===== 題目卡片 ===== */
-.card { 
-    background: linear-gradient(135deg,#1e293b,#020617);
-    padding:30px; 
-    border-radius:22px; 
-    text-align:center; 
-    margin-bottom:20px;
-    box-shadow:0 0 25px rgba(0,255,200,0.15);
-    animation: fadeIn 0.4s ease;
-}
+    st.markdown("""
+    <style>
 
-.big { 
-    font-size:26px; 
-    color:white; 
-    font-weight:600;
-}
+    body {
+        background: radial-gradient(circle at top, #0f172a, #020617);
+        color: white;
+    }
 
-/* ===== HUD ===== */
-.hud {
-    display:flex;
-    justify-content:space-between;
-    background:rgba(15,23,42,0.9);
-    padding:12px 20px;
-    border-radius:16px;
-    margin-bottom:15px;
-    box-shadow:0 0 15px rgba(0,0,0,0.6);
-    backdrop-filter: blur(10px);
-}
+    .card { 
+        background: linear-gradient(135deg,#1e293b,#020617);
+        padding:30px; 
+        border-radius:22px; 
+        text-align:center; 
+        margin-bottom:20px;
+        box-shadow:0 0 25px rgba(0,255,200,0.15);
+        animation: fadeIn 0.4s ease;
+        color: white;
+    }
 
-/* ===== XP 條 ===== */
-.xp-bar {
-    height:8px;
-    background:#1e293b;
-    border-radius:10px;
-    overflow:hidden;
-    margin-top:6px;
-}
+    .big { 
+        font-size:26px; 
+        color:white; 
+        font-weight:600;
+    }
 
-.xp-fill {
-    height:100%;
-    background:linear-gradient(90deg,#22c55e,#4ade80);
-    width:60%;
-}
+    .hud {
+        display:flex;
+        justify-content:space-between;
+        background:rgba(15,23,42,0.9);
+        padding:12px 20px;
+        border-radius:16px;
+        margin-bottom:15px;
+        box-shadow:0 0 15px rgba(0,0,0,0.6);
+        backdrop-filter: blur(10px);
+        color:white;
+    }
 
-/* ===== 選項按鈕 ===== */
-.option-btn button {
-    width:100%;
-    padding:16px;
-    border-radius:16px;
-    border:none;
-    font-size:16px;
-    font-weight:500;
-    background: linear-gradient(135deg,#1e293b,#334155);
-    color:white;
-    cursor:pointer;
-    transition: all 0.2s ease;
-    margin-bottom:8px;
-}
+    .xp-bar {
+        height:8px;
+        background:#1e293b;
+        border-radius:10px;
+        overflow:hidden;
+        margin-top:6px;
+    }
 
-/* hover */
-.option-btn button:hover {
-    transform: scale(1.06);
-    background: linear-gradient(135deg,#2563eb,#1d4ed8);
-    box-shadow:0 8px 20px rgba(37,99,235,0.5);
-}
+    .xp-fill {
+        height:100%;
+        background:linear-gradient(90deg,#22c55e,#4ade80);
+        width:60%;
+    }
 
-/* 點擊 */
-.option-btn button:active {
-    transform: scale(0.96);
-}
+    .option-btn button {
+        width:100%;
+        padding:16px;
+        border-radius:16px;
+        border:none;
+        font-size:16px;
+        font-weight:500;
+        background: linear-gradient(135deg,#1e293b,#334155);
+        color:white;
+        cursor:pointer;
+        transition: all 0.2s ease;
+        margin-bottom:8px;
+    }
 
-/* 正確效果 */
-.correct {
-    background: linear-gradient(135deg,#16a34a,#22c55e) !important;
-    box-shadow:0 0 20px rgba(34,197,94,0.6);
-}
+    .option-btn button:hover {
+        transform: scale(1.06);
+        background: linear-gradient(135deg,#2563eb,#1d4ed8);
+        box-shadow:0 8px 20px rgba(37,99,235,0.5);
+    }
 
-/* 錯誤效果 */
-.wrong {
-    background: linear-gradient(135deg,#dc2626,#ef4444) !important;
-    box-shadow:0 0 20px rgba(239,68,68,0.6);
-}
+    .option-btn button:active {
+        transform: scale(0.96);
+    }
 
-/* ===== 動畫 ===== */
-@keyframes fadeIn {
-    from {opacity:0; transform:translateY(15px);}
-    to {opacity:1; transform:translateY(0);}
-}
+    .note-box { 
+        line-height: 1.8; 
+        font-size: 16px; 
+        background: #1e1e1e; 
+        padding: 15px; 
+        border-radius: 10px; 
+        border-left: 5px solid #00C853; 
+        color:white;
+    }
 
-.note-box { 
-    line-height: 1.8; 
-    font-size: 16px; 
-    background: #1e1e1e; 
-    padding: 15px; 
-    border-radius: 10px; 
-    border-left: 5px solid #00C853; 
-}
+    @keyframes fadeIn {
+        from {opacity:0; transform:translateY(15px);}
+        to {opacity:1; transform:translateY(0);}
+    }
 
-</style>
-""", unsafe_allow_html=True)
+    </style>
+    """, unsafe_allow_html=True)
 
+else:
+
+    st.markdown("""
+    <style>
+
+    body {
+        background: #f5f7fb;
+        color: #111;
+    }
+
+    .card { 
+        background: white;
+        padding:30px; 
+        border-radius:22px; 
+        text-align:center; 
+        margin-bottom:20px;
+        box-shadow:0 6px 20px rgba(0,0,0,0.08);
+        animation: fadeIn 0.4s ease;
+        color: #111;
+    }
+
+    .big { 
+        font-size:26px; 
+        color:#111;
+        font-weight:600;
+    }
+
+    .hud {
+        display:flex;
+        justify-content:space-between;
+        background:white;
+        padding:12px 20px;
+        border-radius:16px;
+        margin-bottom:15px;
+        box-shadow:0 4px 12px rgba(0,0,0,0.08);
+        color:#111;
+    }
+
+    .xp-bar {
+        height:8px;
+        background:#e5e7eb;
+        border-radius:10px;
+        overflow:hidden;
+        margin-top:6px;
+    }
+
+    .xp-fill {
+        height:100%;
+        background:linear-gradient(90deg,#22c55e,#4ade80);
+        width:60%;
+    }
+
+    .option-btn button {
+        width:100%;
+        padding:16px;
+        border-radius:16px;
+        border:none;
+        font-size:16px;
+        font-weight:500;
+        background: #f3f4f6;
+        color:#111;
+        cursor:pointer;
+        transition: all 0.2s ease;
+        margin-bottom:8px;
+    }
+
+    .option-btn button:hover {
+        transform: scale(1.06);
+        background: #dbeafe;
+        box-shadow:0 8px 20px rgba(0,0,0,0.1);
+    }
+
+    .option-btn button:active {
+        transform: scale(0.96);
+    }
+
+    .note-box { 
+        line-height: 1.8; 
+        font-size: 16px; 
+        background: #ffffff;
+        padding: 15px; 
+        border-radius: 10px; 
+        border-left: 5px solid #00C853; 
+        color:#111;
+        box-shadow:0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    @keyframes fadeIn {
+        from {opacity:0; transform:translateY(15px);}
+        to {opacity:1; transform:translateY(0);}
+    }
+
+    </style>
+    """, unsafe_allow_html=True)
 # ==============================================================================
 # 主流程：測驗
 # ==============================================================================
