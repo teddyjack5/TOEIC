@@ -904,41 +904,83 @@ elif mode == "🔁 需加強複習":
 # ==============================================================================
 elif mode == "📚 單字瀏覽":
 
-    st.title("📚 單字記憶庫（Google Sheet）")
+    st.title("📚 單字記憶卡（Flashcard Mode）")
 
     conn_gs = st.connection("gsheets", type=GSheetsConnection)
-    df = conn_gs.read()
 
-    if df.empty:
-        st.warning("目前沒有資料")
+    # 只載入一次（超重要，不然每次 rerun 都重抓）
+    if "flash_df" not in st.session_state:
+        df = conn_gs.read()
+
+        if df.empty:
+            st.warning("目前沒有單字資料")
+            st.stop()
+
+        st.session_state.flash_df = df.sample(frac=1).reset_index(drop=True)  # 🔥 隨機打亂
+        st.session_state.flash_index = 0
+        st.session_state.show_answer = False
+
+    df = st.session_state.flash_df
+    i = st.session_state.flash_index
+
+    # 防呆
+    if i >= len(df):
+        st.success("🎉 已經看完所有單字！")
+        if st.button("🔄 重新開始"):
+            st.session_state.flash_index = 0
+            st.session_state.show_answer = False
+            st.rerun()
         st.stop()
 
-    # 清理欄位（避免錯字 / 空白）
-    df = df[["word", "pos", "definition"]]
+    row = df.iloc[i]
 
-    # 搜尋功能（很實用）
-    search = st.text_input("🔍 搜尋單字")
+    # =========================
+    # 卡片 UI
+    # =========================
+    st.markdown(f"""
+    <div class="card">
+        <div class="big">{row['word']}</div>
+        <p>詞性：{row['pos']}</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    if search:
-        df = df[df["word"].str.contains(search, case=False, na=False)]
+    # =========================
+    # 顯示答案
+    # =========================
+    if not st.session_state.show_answer:
 
-    st.write(f"📊 共 {len(df)} 個單字")
+        if st.button("👀 顯示解釋"):
+            st.session_state.show_answer = True
+            st.rerun()
 
-    # 表格顯示
-    st.dataframe(df, use_container_width=True)
-
-    # 卡片模式（記憶更好用）
-    st.markdown("### 🧠 記憶卡片")
-
-    for _, row in df.iterrows():
+    else:
 
         st.markdown(f"""
-        <div class="card">
-            <div class="big">{row['word']}</div>
-            <p><b>詞性：</b>{row['pos']}</p>
-            <p>{row['definition']}</p>
+        <div class="note-box">
+            <b>Definition：</b><br>
+            {row['definition']}
         </div>
         """, unsafe_allow_html=True)
+
+        # 下一張
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("➡️ 下一張"):
+                st.session_state.flash_index += 1
+                st.session_state.show_answer = False
+                st.rerun()
+
+        with col2:
+            if st.button("🔁 重看"):
+                st.session_state.show_answer = False
+                st.rerun()
+
+    # =========================
+    # 進度條
+    # =========================
+    st.progress((i + 1) / len(df))
+    st.caption(f"{i+1} / {len(df)}")
 
 
 
