@@ -197,19 +197,24 @@ def create_audio_button(text, button_text, theme_mode):
         <button onclick="document.getElementById('audio_{hash(text)}').play()"
         style="
             width:100%;
-            padding:0.5rem 1rem;
-            border-radius:0.5rem;
+            height:38px;
+            padding:0px 12px;
+            border-radius:8px;
             border:1px solid rgba(250,250,250,0.2);
             background-color:#0e1117;
             color:#fafafa;
             font-size:14px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            gap:6px;
             cursor:pointer;
         ">
         {button_text}
         </button>
         """
 
-        components.html(html_code, height=50)
+        components.html(html_code, height=38)
 
 def create_action_button(label, key):
     html_code = f"""
