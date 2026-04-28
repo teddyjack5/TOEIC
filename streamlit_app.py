@@ -448,47 +448,45 @@ elif mode == "🧠 記憶強化":
     </div>
     """, unsafe_allow_html=True)
 
-    user_input = st.text_input(
-        "請輸入英文單字（Recall）",
-        key="recall_input_value"
-    )
+    # ✅ form 正確包整個 input + submit
+    with st.form("recall_form", clear_on_submit=True):
 
-if st.button("提交"):
+        user_input = st.text_input("請輸入英文單字（Recall）")
 
-    correct = user_input.strip().lower() == q["answer"].lower()
+        submitted = st.form_submit_button("提交")
 
-    conn = sqlite3.connect(DB_NAME)
+        if submitted:
 
-    if correct:
-        st.success("🎉 正確！記憶加深")
-        conn.execute("""
-            INSERT INTO user_progress (user_id, vocab_id, correct_streak, last_tested)
-            VALUES (?, ?, 1, CURRENT_TIMESTAMP)
-            ON CONFLICT(user_id, vocab_id)
-            DO UPDATE SET correct_streak = correct_streak + 2
-        """, (user_id, q["id"]))
-    else:
-        st.error(f"❌ 正確答案：{q['answer']}")
-        conn.execute("""
-            INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
-            VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
-            ON CONFLICT(user_id, vocab_id)
-            DO UPDATE SET wrong_count = wrong_count + 2, correct_streak = 0
-        """, (user_id, q["id"]))
+            correct = user_input.strip().lower() == q["answer"].lower()
 
-    conn.commit()
-    conn.close()
+            conn = sqlite3.connect(DB_NAME)
 
-    # ✅ 清空 input（重點）
-    st.session_state.recall_input_value = ""
-    st.rerun()
+            if correct:
+                st.success("🎉 正確！記憶加深")
+                conn.execute("""
+                    INSERT INTO user_progress (user_id, vocab_id, correct_streak, last_tested)
+                    VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+                    ON CONFLICT(user_id, vocab_id)
+                    DO UPDATE SET correct_streak = correct_streak + 2
+                """, (user_id, q["id"]))
+            else:
+                st.error(f"❌ 正確答案：{q['answer']}")
+                conn.execute("""
+                    INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
+                    VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
+                    ON CONFLICT(user_id, vocab_id)
+                    DO UPDATE SET wrong_count = wrong_count + 2, correct_streak = 0
+                """, (user_id, q["id"]))
 
+            conn.commit()
+            conn.close()
+
+    # ✅ form 外顯示解析（這樣才不會重複刷新 input）
     st.markdown("### 📌 例句")
     st.write(q.get("example", ""))
 
     st.markdown("### 🎯 考點")
     st.write(q.get("point", ""))
-
 
 # ==============================================================================
 # 🔁 今日複習 Dashboard
