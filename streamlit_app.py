@@ -55,7 +55,9 @@ def init_session():
         st.session_state.wrong_list = []
     if "selected" not in st.session_state:
         st.session_state.selected = None
-
+    if "recall_input" not in st.session_state:
+        st.session_state.recall_input = ""
+        
 # ==============================================================================
 # 同步
 # ==============================================================================
@@ -477,8 +479,8 @@ if st.button("提交"):
     conn.commit()
     conn.close()
 
-    # ✅ 關鍵：清空輸入框
-    st.session_state.recall_input = ""
+    # ✅ 正確清空方式
+    st.session_state["recall_input"] = ""
     st.rerun()
 
     st.markdown("### 📌 例句")
