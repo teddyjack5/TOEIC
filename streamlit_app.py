@@ -972,9 +972,11 @@ elif mode == "📚 單字瀏覽":
                 st.rerun()
 
         with col2:
-            if st.button("🔁 重看"):
-                st.session_state.show_answer = False
-                st.rerun()
+            if st.button("⬅️ 上一張"):
+                if st.session_state.flash_index > 0:
+                st.session_state.flash_index -= 1
+            st.session_state.show_answer = False
+            st.rerun()
 
     # =========================
     # 進度條
