@@ -348,7 +348,7 @@ def get_due_words(user_id):
 # ==============================================================================
 st.sidebar.title("設定")
 user_id = st.sidebar.text_input("User ID")
-mode = st.sidebar.radio("模式", ["🎯測驗","🧠 記憶強化","🔁 需加強複習","🔁 今日複習", "學習進度分析", "新增單字庫"]) # 新增分析選項
+mode = st.sidebar.radio("模式", ["🎯測驗","🧠 記憶強化","🔁 需加強複習","🔁 今日複習", "學習進度分析", "📚 單字瀏覽", "新增單字庫"]) # 新增分析選項
 old_practice_mode = st.session_state.get("last_practice_mode")
 practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "錯題"])
 if old_practice_mode != practice_mode:
@@ -898,3 +898,47 @@ elif mode == "🔁 需加強複習":
         update_fsrs(user_id, q["id"], 3)
         st.session_state.fsrs_q = None
         st.rerun()
+
+# ==============================================================================
+# 📚 單字瀏覽（Google Sheet）
+# ==============================================================================
+elif mode == "📚 單字瀏覽":
+
+    st.title("📚 單字記憶庫（Google Sheet）")
+
+    conn_gs = st.connection("gsheets", type=GSheetsConnection)
+    df = conn_gs.read()
+
+    if df.empty:
+        st.warning("目前沒有資料")
+        st.stop()
+
+    # 清理欄位（避免錯字 / 空白）
+    df = df[["word", "pos", "definition"]]
+
+    # 搜尋功能（很實用）
+    search = st.text_input("🔍 搜尋單字")
+
+    if search:
+        df = df[df["word"].str.contains(search, case=False, na=False)]
+
+    st.write(f"📊 共 {len(df)} 個單字")
+
+    # 表格顯示
+    st.dataframe(df, use_container_width=True)
+
+    # 卡片模式（記憶更好用）
+    st.markdown("### 🧠 記憶卡片")
+
+    for _, row in df.iterrows():
+
+        st.markdown(f"""
+        <div class="card">
+            <div class="big">{row['word']}</div>
+            <p><b>詞性：</b>{row['pos']}</p>
+            <p>{row['definition']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+
