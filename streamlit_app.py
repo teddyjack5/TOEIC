@@ -172,7 +172,12 @@ def create_audio_button(text, button_text, theme_mode):
 st.sidebar.title("設定")
 user_id = st.sidebar.text_input("User ID")
 mode = st.sidebar.radio("模式", ["測驗", "學習進度分析", "新增單字庫"]) # 新增分析選項
+old_practice_mode = st.session_state.get("last_practice_mode")
 practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "錯題"])
+if old_practice_mode != practice_mode:
+    st.session_state.q = None
+    st.session_state.state = "q"
+    st.session_state.last_practice_mode = practice_mode
 theme_mode = st.sidebar.radio("主題", ["深色","淺色"])
 
 if st.sidebar.button("同步單字"):
@@ -263,10 +268,13 @@ if mode == "測驗":
 
         st.markdown("### 📌 解析")
         # --- 排版優化：比照 Google Sheet 換行 ---
-        ex_text = q.get("example", "").replace("\n", "<br>")
-        pt_text = q.get("point", "").replace("\n", "<br>")
-        st.markdown(f'<div class="note-box"><b>例句：</b><br>{ex_text}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="note-box" style="margin-top:10px; border-left-color: #FFA000;"><b>重點考點：</b><br>{pt_text}</div>', unsafe_allow_html=True)
+        ex_text = str(q.get("example") or "").replace("\n", "<br>")
+        pt_text = str(q.get("point") or "").replace("\n", "<br>")
+        
+        if ex_text:
+            st.markdown(f'<div class="note-box"><b>例句：</b><br>{ex_text}</div>', unsafe_allow_html=True)
+        if pt_text:
+            st.markdown(f'<div class="note-box" style="margin-top:10px; border-left-color: #FFA000;"><b>重點考點：</b><br>{pt_text}</div>', unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
         with col1:
