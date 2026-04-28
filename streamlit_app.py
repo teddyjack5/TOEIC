@@ -513,7 +513,7 @@ if mode == "🎯測驗":
     if st.session_state.state == "q":
         for i, opt in enumerate(q["options"]):
 
-            icon = ["🎯","🔥","⚡","💡"][i % 4]
+            icon = ["","","",""][i % 4]
 
             st.markdown('<div class="option-btn">', unsafe_allow_html=True)
 
