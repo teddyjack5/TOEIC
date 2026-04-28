@@ -427,7 +427,6 @@ elif mode == "新增單字庫":
 # ==============================================================================
 # 🧠 新增 MODE：學習科學入口
 # ==============================================================================
-
 elif mode == "🧠 記憶強化":
 
     st.title("🧠 記憶強化模式（Learning Science Mode）")
@@ -436,7 +435,11 @@ elif mode == "🧠 記憶強化":
         st.warning("請輸入 User ID")
         st.stop()
 
-    q = get_recall_question(user_id)
+    # ✅ 只在沒有題目時才抓新題
+    if "current_q" not in st.session_state:
+        st.session_state.current_q = get_recall_question(user_id)
+
+    q = st.session_state.current_q
 
     if q is None:
         st.info("目前沒有需要複習的單字 🎉")
@@ -448,16 +451,17 @@ elif mode == "🧠 記憶強化":
     </div>
     """, unsafe_allow_html=True)
 
-    # ✅ form 正確包整個 input + submit
     with st.form("recall_form", clear_on_submit=True):
 
         user_input = st.text_input("請輸入英文單字（Recall）")
-
         submitted = st.form_submit_button("提交")
 
         if submitted:
 
-            correct = user_input.strip().lower() == q["answer"].lower()
+            # ✅ 🔥 重點：鎖住當下題目（避免 rerun 換題）
+            current_q = st.session_state.current_q
+
+            correct = user_input.strip().lower() == current_q["answer"].lower()
 
             conn = sqlite3.connect(DB_NAME)
 
@@ -468,20 +472,24 @@ elif mode == "🧠 記憶強化":
                     VALUES (?, ?, 1, CURRENT_TIMESTAMP)
                     ON CONFLICT(user_id, vocab_id)
                     DO UPDATE SET correct_streak = correct_streak + 2
-                """, (user_id, q["id"]))
+                """, (user_id, current_q["id"]))
             else:
-                st.error(f"❌ 正確答案：{q['answer']}")
+                st.error(f"❌ 正確答案：{current_q['answer']}")
                 conn.execute("""
                     INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
                     VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
                     ON CONFLICT(user_id, vocab_id)
                     DO UPDATE SET wrong_count = wrong_count + 2, correct_streak = 0
-                """, (user_id, q["id"]))
+                """, (user_id, current_q["id"]))
 
             conn.commit()
             conn.close()
 
-    # ✅ form 外顯示解析（這樣才不會重複刷新 input）
+            # ✅ 清掉題目 → 才會下一題
+            st.session_state.current_q = get_recall_question(user_id)
+
+            st.rerun()
+
     st.markdown("### 📌 例句")
     st.write(q.get("example", ""))
 
