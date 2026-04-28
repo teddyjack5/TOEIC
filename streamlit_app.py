@@ -55,8 +55,8 @@ def init_session():
         st.session_state.wrong_list = []
     if "selected" not in st.session_state:
         st.session_state.selected = None
-    if "recall_input" not in st.session_state:
-        st.session_state.recall_input = ""
+    if "recall_input_value" not in st.session_state:
+        st.session_state.recall_input_value = ""
         
 # ==============================================================================
 # 同步
@@ -449,9 +449,9 @@ elif mode == "🧠 記憶強化":
     """, unsafe_allow_html=True)
 
     user_input = st.text_input(
-    "請輸入英文單字（Recall）",
-    key="recall_input"
-)
+        "請輸入英文單字（Recall）",
+        key="recall_input_value"
+    )
 
 if st.button("提交"):
 
@@ -479,8 +479,8 @@ if st.button("提交"):
     conn.commit()
     conn.close()
 
-    # ✅ 正確清空方式
-    st.session_state["recall_input"] = ""
+    # ✅ 清空 input（重點）
+    st.session_state.recall_input_value = ""
     st.rerun()
 
     st.markdown("### 📌 例句")
