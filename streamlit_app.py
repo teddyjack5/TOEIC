@@ -113,22 +113,41 @@ def get_cloze_question(user_id):
         LEFT JOIN user_progress p ON v.id = p.vocab_id AND p.user_id = ?
         WHERE v.example IS NOT NULL AND v.example != ''
     """, conn, params=(user_id,))
+    
     if df.empty: return None
+    
     df['weight'] = 1 + df['wrongs'] * 5 - df['streak'] * 1.5
     df['weight'] = df['weight'].clip(lower=0.1)
     target = df.sample(n=1, weights='weight').iloc[0]
-    sentence = str(target['example'])
+    
+    # --- 資料清洗：移除括號內的中文 ---
+    raw_sentence = str(target['example'])
+    # 使用正則表達式移除 () 或 （） 及其內容
+    # [\(（].*?[\)）] 會匹配從左括號到右括號之間的所有文字
+    clean_sentence = re.sub(r'[\(（].*?[\)）]', '', raw_sentence).strip()
+    
     word = str(target['word'])
-    blank_sentence = re.sub(re.escape(word), " ______ ", sentence, flags=re.IGNORECASE)
+    
+    # 使用清洗過的句子來製作填空題
+    blank_sentence = re.sub(re.escape(word), " ______ ", clean_sentence, flags=re.IGNORECASE)
+    
     dist = pd.read_sql_query("""
         SELECT word FROM vocabs WHERE word != ? AND pos = ? ORDER BY RANDOM() LIMIT 3
     """, conn, params=(word, target['pos']))
+    
     options = dist['word'].tolist() + [word]
     random.shuffle(options)
     conn.close()
+    
     return {
-        "id": int(target["id"]), "sentence": blank_sentence, "answer": word,
-        "options": options, "example": sentence, "point": target["point"], "word": word
+        "id": int(target["id"]), 
+        "sentence": blank_sentence, 
+        "answer": word,
+        "options": options, 
+        "example": clean_sentence, # 這裡也回傳清洗後的純英文句子
+        "raw_example": raw_sentence, # 保留原始含中文的內容，若之後解析想顯示可用
+        "point": target["point"], 
+        "word": word
     }
 
 # ==============================================================================
