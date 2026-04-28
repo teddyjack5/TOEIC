@@ -975,8 +975,8 @@ elif mode == "📚 單字瀏覽":
             if st.button("⬅️ 上一張"):
                 if st.session_state.flash_index > 0:
                 st.session_state.flash_index -= 1
-            st.session_state.show_answer = False
-            st.rerun()
+                st.session_state.show_answer = False
+                st.rerun()
 
     # =========================
     # 進度條
