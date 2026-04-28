@@ -949,9 +949,15 @@ elif mode == "📚 單字瀏覽":
     # =========================
     if not st.session_state.show_answer:
 
+        col1, col2 = st.columns(2)
+
+        with col1:
         if st.button("👀 顯示解釋"):
             st.session_state.show_answer = True
             st.rerun()
+
+        with col2:
+            create_audio_button(row.get("word",""), "🔊 單字", theme_mode)
 
     else:
 
