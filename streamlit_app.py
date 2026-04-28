@@ -7,7 +7,7 @@ import re
 import requests
 import base64
 import io
-import plotly.express as px  # 新增：用於繪製魔王單字圖表
+import plotly.express as px  
 import datetime
 from gtts import gTTS
 from streamlit_gsheets import GSheetsConnection
@@ -257,7 +257,7 @@ def get_recall_question(user_id):
 # ==============================================================================
 st.sidebar.title("設定")
 user_id = st.sidebar.text_input("User ID")
-mode = st.sidebar.radio("模式", ["測驗", "學習進度分析","🧠 記憶強化","🔁 今日複習", "新增單字庫"]) # 新增分析選項
+mode = st.sidebar.radio("模式", ["測驗","🧠 記憶強化","🔁 今日複習", "學習進度分析", "新增單字庫"]) # 新增分析選項
 old_practice_mode = st.session_state.get("last_practice_mode")
 practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "錯題"])
 if old_practice_mode != practice_mode:
