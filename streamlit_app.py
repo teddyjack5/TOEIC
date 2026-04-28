@@ -31,9 +31,6 @@ def init_db():
                  (user_id TEXT, vocab_id INTEGER, wrong_count INTEGER DEFAULT 0, 
                   correct_streak INTEGER DEFAULT 0, last_tested TIMESTAMP,
                   PRIMARY KEY (user_id, vocab_id))''')
-
-    conn.commit()
-    conn.close()
     try:
         c.execute("ALTER TABLE user_progress ADD COLUMN next_review TIMESTAMP")
     except:
@@ -49,6 +46,9 @@ def init_db():
     except:
         pass
 
+    conn.commit()
+    conn.close()
+    
 init_db()
 
 # ==============================================================================
