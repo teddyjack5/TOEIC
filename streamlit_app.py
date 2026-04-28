@@ -525,27 +525,27 @@ if mode == "測驗":
                 correct = q.get("answer") or q.get("correct")
                 is_correct = opt == correct
 
-        if is_correct:
-            conn.execute("""
+            if is_correct:
+                conn.execute("""
                 INSERT INTO user_progress (user_id, vocab_id, correct_streak, last_tested)
                 VALUES (?, ?, 1, CURRENT_TIMESTAMP)
                 ON CONFLICT(user_id, vocab_id) DO UPDATE SET
                 correct_streak = correct_streak + 1, last_tested = CURRENT_TIMESTAMP
-            """, (user_id, q['id']))
-        else:
-            conn.execute("""
+                """, (user_id, q['id']))
+            else:
+                conn.execute("""
                 INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
                 VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
                 ON CONFLICT(user_id, vocab_id) DO UPDATE SET
                 wrong_count = wrong_count + 1, correct_streak = 0, last_tested = CURRENT_TIMESTAMP
-            """, (user_id, q['id']))
+                """, (user_id, q['id']))
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+            conn.close()
 
-        st.rerun()
+            st.rerun()
 
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
         correct = q.get("answer") or q.get("correct")
         selected = st.session_state.selected
