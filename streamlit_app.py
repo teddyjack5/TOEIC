@@ -34,6 +34,20 @@ def init_db():
 
     conn.commit()
     conn.close()
+    try:
+        c.execute("ALTER TABLE user_progress ADD COLUMN next_review TIMESTAMP")
+    except:
+        pass
+
+    try:
+        c.execute("ALTER TABLE user_progress ADD COLUMN interval INTEGER DEFAULT 1")
+    except:
+        pass
+
+    try:
+        c.execute("ALTER TABLE user_progress ADD COLUMN ease REAL DEFAULT 2.5")
+    except:
+        pass
 
 init_db()
 
@@ -251,13 +265,90 @@ def get_recall_question(user_id):
         "point": target["point"]
     }
 
+def update_fsrs(user_id, vocab_id, rating):
+    """
+    rating:
+    0 = 錯
+    1 = 困難
+    2 = 普通
+    3 = 簡單
+    """
 
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+
+    row = c.execute("""
+        SELECT interval, ease FROM user_progress
+        WHERE user_id=? AND vocab_id=?
+    """, (user_id, vocab_id)).fetchone()
+
+    if row:
+        interval, ease = row
+    else:
+        interval, ease = 1, 2.5
+
+    # === FSRS-lite 更新規則 ===
+    if rating == 0:  # 錯
+        interval = 1
+        ease = max(1.3, ease - 0.2)
+
+    elif rating == 1:  # 困難
+        interval = max(1, int(interval * 1.2))
+        ease = max(1.3, ease - 0.1)
+
+    elif rating == 2:  # 普通
+        interval = int(interval * ease)
+
+    elif rating == 3:  # 簡單
+        interval = int(interval * ease * 1.3)
+        ease += 0.05
+
+    next_review = datetime.datetime.now() + datetime.timedelta(days=interval)
+
+    c.execute("""
+        INSERT INTO user_progress (user_id, vocab_id, interval, ease, next_review)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, vocab_id)
+        DO UPDATE SET
+            interval=?,
+            ease=?,
+            next_review=?
+    """, (user_id, vocab_id, interval, ease, next_review,
+          interval, ease, next_review))
+
+    conn.commit()
+    conn.close()
+
+def get_due_words(user_id):
+    conn = sqlite3.connect(DB_NAME)
+
+    df = pd.read_sql_query("""
+        SELECT v.*, p.next_review
+        FROM vocabs v
+        JOIN user_progress p ON v.id = p.vocab_id
+        WHERE p.user_id = ?
+    """, conn, params=(user_id,))
+
+    conn.close()
+
+    if df.empty:
+        return []
+
+    now = datetime.datetime.now()
+
+    df["next_review"] = pd.to_datetime(df["next_review"], errors="coerce")
+
+    due = df[
+        (df["next_review"].isna()) | (df["next_review"] <= now)
+    ]
+
+    return due.to_dict("records")
 # ==============================================================================
 # Sidebar
 # ==============================================================================
 st.sidebar.title("設定")
 user_id = st.sidebar.text_input("User ID")
-mode = st.sidebar.radio("模式", ["測驗","🧠 記憶強化","🔁 今日複習", "學習進度分析", "新增單字庫"]) # 新增分析選項
+mode = st.sidebar.radio("模式", ["測驗","🧠 記憶強化","🔁 需加強複習","🔁 今日複習", "學習進度分析", "新增單字庫"]) # 新增分析選項
 old_practice_mode = st.session_state.get("last_practice_mode")
 practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "錯題"])
 if old_practice_mode != practice_mode:
@@ -553,3 +644,55 @@ elif mode == "🔁 今日複習":
         """, unsafe_allow_html=True)
 
         st.progress(min(w.get("correct_streak", 0) / 5, 1.0))
+
+elif mode == "🔁 需加強複習":
+
+    st.title("🔁 FSRS 智慧複習")
+
+    if not user_id:
+        st.warning("請輸入 User ID")
+        st.stop()
+
+    if "fsrs_q" not in st.session_state:
+        words = get_due_words(user_id)
+        if words:
+            st.session_state.fsrs_q = random.choice(words)
+        else:
+            st.session_state.fsrs_q = None
+
+    q = st.session_state.fsrs_q
+
+    if q is None:
+        st.success("🎉 今天沒有需要複習的單字！")
+        st.stop()
+
+    st.markdown(f"""
+    <div class="card">
+        <div class="big">{q['word']}</div>
+        <p>{q['definition']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### 🤔 你記得嗎？")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    if col1.button("❌ 忘記"):
+        update_fsrs(user_id, q["id"], 0)
+        st.session_state.fsrs_q = None
+        st.rerun()
+
+    if col2.button("😵 困難"):
+        update_fsrs(user_id, q["id"], 1)
+        st.session_state.fsrs_q = None
+        st.rerun()
+
+    if col3.button("🙂 普通"):
+        update_fsrs(user_id, q["id"], 2)
+        st.session_state.fsrs_q = None
+        st.rerun()
+
+    if col4.button("😎 簡單"):
+        update_fsrs(user_id, q["id"], 3)
+        st.session_state.fsrs_q = None
+        st.rerun()
