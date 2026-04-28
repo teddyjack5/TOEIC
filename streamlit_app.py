@@ -368,12 +368,110 @@ init_session()
 # ==============================================================================
 st.markdown("""
 <style>
-.card { background:#111827; padding:25px; border-radius:20px; text-align:center; margin-bottom:20px; }
-.big { font-size:24px; color:white; }
-.note-box { 
-    line-height: 1.8; font-size: 16px; background: #1e1e1e; 
-    padding: 15px; border-radius: 10px; border-left: 5px solid #00C853; 
+
+/* ===== 背景微動畫 ===== */
+body {
+    background: radial-gradient(circle at top, #0f172a, #020617);
 }
+
+/* ===== 題目卡片 ===== */
+.card { 
+    background: linear-gradient(135deg,#1e293b,#020617);
+    padding:30px; 
+    border-radius:22px; 
+    text-align:center; 
+    margin-bottom:20px;
+    box-shadow:0 0 25px rgba(0,255,200,0.15);
+    animation: fadeIn 0.4s ease;
+}
+
+.big { 
+    font-size:26px; 
+    color:white; 
+    font-weight:600;
+}
+
+/* ===== HUD ===== */
+.hud {
+    display:flex;
+    justify-content:space-between;
+    background:rgba(15,23,42,0.9);
+    padding:12px 20px;
+    border-radius:16px;
+    margin-bottom:15px;
+    box-shadow:0 0 15px rgba(0,0,0,0.6);
+    backdrop-filter: blur(10px);
+}
+
+/* ===== XP 條 ===== */
+.xp-bar {
+    height:8px;
+    background:#1e293b;
+    border-radius:10px;
+    overflow:hidden;
+    margin-top:6px;
+}
+
+.xp-fill {
+    height:100%;
+    background:linear-gradient(90deg,#22c55e,#4ade80);
+    width:60%;
+}
+
+/* ===== 選項按鈕 ===== */
+.option-btn button {
+    width:100%;
+    padding:16px;
+    border-radius:16px;
+    border:none;
+    font-size:16px;
+    font-weight:500;
+    background: linear-gradient(135deg,#1e293b,#334155);
+    color:white;
+    cursor:pointer;
+    transition: all 0.2s ease;
+    margin-bottom:8px;
+}
+
+/* hover */
+.option-btn button:hover {
+    transform: scale(1.06);
+    background: linear-gradient(135deg,#2563eb,#1d4ed8);
+    box-shadow:0 8px 20px rgba(37,99,235,0.5);
+}
+
+/* 點擊 */
+.option-btn button:active {
+    transform: scale(0.96);
+}
+
+/* 正確效果 */
+.correct {
+    background: linear-gradient(135deg,#16a34a,#22c55e) !important;
+    box-shadow:0 0 20px rgba(34,197,94,0.6);
+}
+
+/* 錯誤效果 */
+.wrong {
+    background: linear-gradient(135deg,#dc2626,#ef4444) !important;
+    box-shadow:0 0 20px rgba(239,68,68,0.6);
+}
+
+/* ===== 動畫 ===== */
+@keyframes fadeIn {
+    from {opacity:0; transform:translateY(15px);}
+    to {opacity:1; transform:translateY(0);}
+}
+
+.note-box { 
+    line-height: 1.8; 
+    font-size: 16px; 
+    background: #1e1e1e; 
+    padding: 15px; 
+    border-radius: 10px; 
+    border-left: 5px solid #00C853; 
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -398,38 +496,56 @@ if mode == "測驗":
         st.stop()
 
     st.progress(min(st.session_state.get("count", 1) / TOTAL, 1.0))
-    st.markdown(f"🏆 {st.session_state.score}　🔥 {st.session_state.streak}")
+    st.markdown(f"""
+    <div class="hud">
+    <div>
+        🏆 {st.session_state.score}
+        <div class="xp-bar"><div class="xp-fill"></div></div>
+    </div>
+    <div>🔥 {st.session_state.streak}</div>
+    <div>📊 {st.session_state.count}</div>
+</div>
+""", unsafe_allow_html=True)
 
     display_text = q.get("sentence", q.get("definition", ""))
     st.markdown(f'<div class="card"><div class="big">{display_text}</div></div>', unsafe_allow_html=True)
 
     if st.session_state.state == "q":
-        for opt in q["options"]:
-            if st.button(opt, use_container_width=True):
+        for i, opt in enumerate(q["options"]):
+
+            icon = ["🎯","🔥","⚡","💡"][i % 4]
+
+            st.markdown('<div class="option-btn">', unsafe_allow_html=True)
+
+            if st.button(f"{icon} {opt}", key=f"opt_{i}", use_container_width=True):
                 st.session_state.selected = opt
                 st.session_state.state = "result"
-                
-                # --- 更新資料庫進度 ---
+
                 conn = sqlite3.connect(DB_NAME)
                 correct = q.get("answer") or q.get("correct")
                 is_correct = opt == correct
-                if is_correct:
-                    conn.execute("""
-                        INSERT INTO user_progress (user_id, vocab_id, correct_streak, last_tested)
-                        VALUES (?, ?, 1, CURRENT_TIMESTAMP)
-                        ON CONFLICT(user_id, vocab_id) DO UPDATE SET
-                        correct_streak = correct_streak + 1, last_tested = CURRENT_TIMESTAMP
-                    """, (user_id, q['id']))
-                else:
-                    conn.execute("""
-                        INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
-                        VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
-                        ON CONFLICT(user_id, vocab_id) DO UPDATE SET
-                        wrong_count = wrong_count + 1, correct_streak = 0, last_tested = CURRENT_TIMESTAMP
-                    """, (user_id, q['id']))
-                conn.commit()
-                conn.close()
-                st.rerun()
+
+        if is_correct:
+            conn.execute("""
+                INSERT INTO user_progress (user_id, vocab_id, correct_streak, last_tested)
+                VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+                ON CONFLICT(user_id, vocab_id) DO UPDATE SET
+                correct_streak = correct_streak + 1, last_tested = CURRENT_TIMESTAMP
+            """, (user_id, q['id']))
+        else:
+            conn.execute("""
+                INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
+                VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
+                ON CONFLICT(user_id, vocab_id) DO UPDATE SET
+                wrong_count = wrong_count + 1, correct_streak = 0, last_tested = CURRENT_TIMESTAMP
+            """, (user_id, q['id']))
+
+        conn.commit()
+        conn.close()
+
+        st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
     else:
         correct = q.get("answer") or q.get("correct")
         selected = st.session_state.selected
