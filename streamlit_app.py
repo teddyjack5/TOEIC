@@ -184,6 +184,68 @@ def create_audio_button(text, button_text, theme_mode):
     else:
         st.write("🚫 無語音")
 
+# ------------------------------------------------------------------------------
+# 🧠 FSRS-like memory score (simple version)
+# ------------------------------------------------------------------------------
+def calculate_memory_strength(wrong_count, correct_streak):
+    """
+    模擬記憶強度（越高越記得）
+    """
+    return max(0.1, correct_streak * 2 - wrong_count * 1.5)
+
+
+# ------------------------------------------------------------------------------
+# 🔁 取得「快忘記的單字」
+# ------------------------------------------------------------------------------
+def get_review_words(user_id):
+    conn = sqlite3.connect(DB_NAME)
+
+    df = pd.read_sql_query("""
+        SELECT v.*, 
+               IFNULL(p.wrong_count,0) as wrongs,
+               IFNULL(p.correct_streak,0) as streak
+        FROM vocabs v
+        LEFT JOIN user_progress p
+        ON v.id = p.vocab_id AND p.user_id = ?
+    """, conn, params=(user_id,))
+
+    conn.close()
+
+    if df.empty:
+        return []
+
+    df["memory_score"] = df.apply(
+        lambda x: calculate_memory_strength(x["wrongs"], x["streak"]),
+        axis=1
+    )
+
+    # 越低 = 越容易忘
+    df = df.sort_values("memory_score").head(10)
+
+    return df.to_dict("records")
+
+
+# ------------------------------------------------------------------------------
+# 🧩 Recall 測驗（不用選項，直接回想）
+# ------------------------------------------------------------------------------
+def get_recall_question(user_id):
+    words = get_review_words(user_id)
+
+    if not words:
+        return None
+
+    target = random.choice(words)
+
+    return {
+        "id": target["id"],
+        "type": "recall",
+        "definition": target["definition"],
+        "answer": target["word"],
+        "example": target["example"],
+        "point": target["point"]
+    }
+
+
 # ==============================================================================
 # Sidebar
 # ==============================================================================
@@ -360,69 +422,6 @@ elif mode == "新增單字庫":
         if st.form_submit_button("送出"):
             requests.post(url, json={"word": w, "definition": d, "example": ex, "point": pt})
             st.success("完成")
-
-# ------------------------------------------------------------------------------
-# 🧠 FSRS-like memory score (simple version)
-# ------------------------------------------------------------------------------
-def calculate_memory_strength(wrong_count, correct_streak):
-    """
-    模擬記憶強度（越高越記得）
-    """
-    return max(0.1, correct_streak * 2 - wrong_count * 1.5)
-
-
-# ------------------------------------------------------------------------------
-# 🔁 取得「快忘記的單字」
-# ------------------------------------------------------------------------------
-def get_review_words(user_id):
-    conn = sqlite3.connect(DB_NAME)
-
-    df = pd.read_sql_query("""
-        SELECT v.*, 
-               IFNULL(p.wrong_count,0) as wrongs,
-               IFNULL(p.correct_streak,0) as streak
-        FROM vocabs v
-        LEFT JOIN user_progress p
-        ON v.id = p.vocab_id AND p.user_id = ?
-    """, conn, params=(user_id,))
-
-    conn.close()
-
-    if df.empty:
-        return []
-
-    df["memory_score"] = df.apply(
-        lambda x: calculate_memory_strength(x["wrongs"], x["streak"]),
-        axis=1
-    )
-
-    # 越低 = 越容易忘
-    df = df.sort_values("memory_score").head(10)
-
-    return df.to_dict("records")
-
-
-# ------------------------------------------------------------------------------
-# 🧩 Recall 測驗（不用選項，直接回想）
-# ------------------------------------------------------------------------------
-def get_recall_question(user_id):
-    words = get_review_words(user_id)
-
-    if not words:
-        return None
-
-    target = random.choice(words)
-
-    return {
-        "id": target["id"],
-        "type": "recall",
-        "definition": target["definition"],
-        "answer": target["word"],
-        "example": target["example"],
-        "point": target["point"]
-    }
-
-
 # ==============================================================================
 # 🧠 新增 MODE：學習科學入口
 # ==============================================================================
