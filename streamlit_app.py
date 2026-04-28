@@ -348,7 +348,7 @@ def get_due_words(user_id):
 # ==============================================================================
 st.sidebar.title("設定")
 user_id = st.sidebar.text_input("User ID")
-mode = st.sidebar.radio("模式", ["🎯測驗","🧠 記憶強化","🔁 需加強複習","🔁 今日複習", "學習進度分析", "📚 單字瀏覽", "新增單字庫"]) # 新增分析選項
+mode = st.sidebar.radio("模式", ["🎯測驗","🧠 記憶強化","🔁 需加強複習","🔁 今日複習", "📊學習進度分析", "📚 單字瀏覽", "新增單字庫"]) # 新增分析選項
 old_practice_mode = st.session_state.get("last_practice_mode")
 practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "錯題"])
 if old_practice_mode != practice_mode:
@@ -669,7 +669,7 @@ if mode == "🎯測驗":
 # ==============================================================================
 # 主流程：學習進度分析（新增整合內容）
 # ==============================================================================
-elif mode == "學習進度分析":
+elif mode == "📊學習進度分析":
     st.subheader("📊 我的學習戰報")
     conn = sqlite3.connect(DB_NAME)
     query = """
