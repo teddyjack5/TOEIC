@@ -190,19 +190,26 @@ def get_tts_base64(text):
 def create_audio_button(text, button_text, theme_mode):
     audio_base64 = get_tts_base64(text)
     if audio_base64:
-        bg_color = "#262730" if theme_mode == "深色" else "#F0F2F6"
-        text_color = "white" if theme_mode == "深色" else "#31333F"
+
         html_code = f"""
         <audio id="audio_{hash(text)}" src="data:audio/mp3;base64,{audio_base64}"></audio>
+
         <button onclick="document.getElementById('audio_{hash(text)}').play()"
-        style="width:100%;padding:10px;border-radius:10px;cursor:pointer;
-        background:{bg_color};color:{text_color};border:1px solid #444;">
+        style="
+            width:100%;
+            padding:0.5rem 1rem;
+            border-radius:0.5rem;
+            border:1px solid rgba(250,250,250,0.2);
+            background-color:#0e1117;
+            color:#fafafa;
+            font-size:14px;
+            cursor:pointer;
+        ">
         {button_text}
         </button>
         """
-        components.html(html_code, height=55)
-    else:
-        st.write("🚫 無語音")
+
+        components.html(html_code, height=50))
 
 def create_action_button(label, key):
     html_code = f"""
@@ -969,7 +976,7 @@ elif mode == "📚 單字瀏覽":
         col1, col2 = st.columns(2)
 
         with col1:
-            if create_action_button("👀 顯示解釋", "show"):
+            if st.button("👀 顯示解釋", use_container_width=True)
                 st.session_state.show_answer = True
                 st.rerun()
         with col2:
