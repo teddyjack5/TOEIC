@@ -204,6 +204,23 @@ def create_audio_button(text, button_text, theme_mode):
     else:
         st.write("🚫 無語音")
 
+def create_action_button(label, key):
+    html_code = f"""
+    <button onclick="window.parent.postMessage({{type: 'streamlit:setComponentValue', value: '{key}'}}, '*')"
+    style="
+        width:100%;
+        padding:10px;
+        border-radius:10px;
+        background:#262730;
+        color:white;
+        border:1px solid #444;
+        cursor:pointer;
+    ">
+    {label}
+    </button>
+    """
+    return components.html(html_code, height=55)
+
 # ------------------------------------------------------------------------------
 # 🧠 FSRS-like memory score (simple version)
 # ------------------------------------------------------------------------------
@@ -952,7 +969,7 @@ elif mode == "📚 單字瀏覽":
         col1, col2 = st.columns(2)
 
         with col1:
-            if st.button("👀 顯示解釋"):
+            if create_action_button("👀 顯示解釋", "show"):
                 st.session_state.show_answer = True
                 st.rerun()
         with col2:
