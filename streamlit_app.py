@@ -57,6 +57,10 @@ def init_session():
         st.session_state.selected = None
     if "recall_input_value" not in st.session_state:
         st.session_state.recall_input_value = ""
+    if "recall_state" not in st.session_state:
+        st.session_state.recall_state = "question"
+    if "recall_input" not in st.session_state:
+        st.session_state.recall_input = ""
         
 # ==============================================================================
 # 同步
@@ -435,33 +439,39 @@ elif mode == "🧠 記憶強化":
         st.warning("請輸入 User ID")
         st.stop()
 
-    # ✅ 只在沒有題目時才抓新題
-    if "current_q" not in st.session_state:
-        st.session_state.current_q = get_recall_question(user_id)
+    # 初始化 state
+    if "recall_state" not in st.session_state:
+        st.session_state.recall_state = "question"
 
-    q = st.session_state.current_q
+    if "recall_q" not in st.session_state:
+        st.session_state.recall_q = get_recall_question(user_id)
+
+    q = st.session_state.recall_q
 
     if q is None:
         st.info("目前沒有需要複習的單字 🎉")
         st.stop()
 
+    # 顯示題目
     st.markdown(f"""
     <div class="card">
         <div class="big">💡 {q['definition']}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    with st.form("recall_form", clear_on_submit=True):
+    # =========================
+    # 🎯 作答階段
+    # =========================
+    if st.session_state.recall_state == "question":
 
-        user_input = st.text_input("請輸入英文單字（Recall）")
-        submitted = st.form_submit_button("提交")
+        user_input = st.text_input(
+            "請輸入英文單字（Recall）",
+            key="recall_input"
+        )
 
-        if submitted:
+        if st.button("提交"):
 
-            # ✅ 🔥 重點：鎖住當下題目（避免 rerun 換題）
-            current_q = st.session_state.current_q
-
-            correct = user_input.strip().lower() == current_q["answer"].lower()
+            correct = user_input.strip().lower() == q["answer"].lower()
 
             conn = sqlite3.connect(DB_NAME)
 
@@ -472,29 +482,42 @@ elif mode == "🧠 記憶強化":
                     VALUES (?, ?, 1, CURRENT_TIMESTAMP)
                     ON CONFLICT(user_id, vocab_id)
                     DO UPDATE SET correct_streak = correct_streak + 2
-                """, (user_id, current_q["id"]))
+                """, (user_id, q["id"]))
             else:
-                st.error(f"❌ 正確答案：{current_q['answer']}")
+                st.error(f"❌ 正確答案：{q['answer']}")
                 conn.execute("""
                     INSERT INTO user_progress (user_id, vocab_id, wrong_count, correct_streak, last_tested)
                     VALUES (?, ?, 1, 0, CURRENT_TIMESTAMP)
                     ON CONFLICT(user_id, vocab_id)
                     DO UPDATE SET wrong_count = wrong_count + 2, correct_streak = 0
-                """, (user_id, current_q["id"]))
+                """, (user_id, q["id"]))
 
             conn.commit()
             conn.close()
 
-            # ✅ 清掉題目 → 才會下一題
-            st.session_state.current_q = get_recall_question(user_id)
-
+            # 👉 切換到結果模式（重點）
+            st.session_state.recall_state = "result"
             st.rerun()
 
-    st.markdown("### 📌 例句")
-    st.write(q.get("example", ""))
+    # =========================
+    # 📘 結果階段（停留畫面）
+    # =========================
+    elif st.session_state.recall_state == "result":
 
-    st.markdown("### 🎯 考點")
-    st.write(q.get("point", ""))
+        st.markdown("### 📌 例句")
+        st.write(q.get("example", ""))
+
+        st.markdown("### 🎯 考點")
+        st.write(q.get("point", ""))
+
+        if st.button("下一題 ➜"):
+
+            # 換新題
+            st.session_state.recall_q = get_recall_question(user_id)
+            st.session_state.recall_state = "question"
+            st.session_state.recall_input = ""
+
+            st.rerun()
 
 # ==============================================================================
 # 🔁 今日複習 Dashboard
