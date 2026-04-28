@@ -976,7 +976,7 @@ elif mode == "📚 單字瀏覽":
         col1, col2 = st.columns(2)
 
         with col1:
-            if st.button("👀 顯示解釋", use_container_width=True)
+            if st.button("👀 顯示解釋", use_container_width=True):
                 st.session_state.show_answer = True
                 st.rerun()
         with col2:
