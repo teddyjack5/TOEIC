@@ -19,6 +19,38 @@ st.set_page_config(page_title="多益學習APP", page_icon="📱", layout="cente
 
 DB_NAME = "toeic_pro.db"
 
+def auto_sync_monday():
+    today = datetime.date.today()
+    week_id = today.strftime("%Y-%W")  # 第幾週
+    weekday = today.weekday()  # 0 = Monday
+
+    if weekday != 0:
+        return  # 不是週一 → 不做事
+
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+
+    row = c.execute("""
+        SELECT last_sync_week FROM sync_meta WHERE id=1
+    """).fetchone()
+
+    last_week = row[0] if row else None
+
+    if last_week != week_id:
+        sync_data()
+
+        c.execute("""
+            INSERT INTO sync_meta (id, last_sync_week)
+            VALUES (1, ?)
+            ON CONFLICT(id) DO UPDATE SET last_sync_week=excluded.last_sync_week
+        """, (week_id,))
+
+        conn.commit()
+
+        st.success(f"✅ 每週同步完成：{week_id}")
+
+    conn.close()
+
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -109,38 +141,6 @@ def sync_data():
 
     conn_db.commit()
     conn_db.close()
-
-def auto_sync_monday():
-    today = datetime.date.today()
-    week_id = today.strftime("%Y-%W")  # 第幾週
-    weekday = today.weekday()  # 0 = Monday
-
-    if weekday != 0:
-        return  # 不是週一 → 不做事
-
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-
-    row = c.execute("""
-        SELECT last_sync_week FROM sync_meta WHERE id=1
-    """).fetchone()
-
-    last_week = row[0] if row else None
-
-    if last_week != week_id:
-        sync_data()
-
-        c.execute("""
-            INSERT INTO sync_meta (id, last_sync_week)
-            VALUES (1, ?)
-            ON CONFLICT(id) DO UPDATE SET last_sync_week=excluded.last_sync_week
-        """, (week_id,))
-
-        conn.commit()
-
-        st.success(f"✅ 每週同步完成：{week_id}")
-
-    conn.close()
 
 # ==============================================================================
 # 出題（單字/填空邏輯維持不變）
