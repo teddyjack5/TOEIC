@@ -192,29 +192,31 @@ def create_audio_button(text, button_text, theme_mode):
     if audio_base64:
 
         html_code = f"""
-        <audio id="audio_{hash(text)}" src="data:audio/mp3;base64,{audio_base64}"></audio>
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;">
+            <audio id="audio_{hash(text)}" src="data:audio/mp3;base64,{audio_base64}"></audio>
 
-        <button onclick="document.getElementById('audio_{hash(text)}').play()"
-        style="
-            width:100%;
-            height:38px;
-            padding:0px 12px;
-            border-radius:8px;
-            border:1px solid rgba(250,250,250,0.2);
-            background-color:#0e1117;
-            color:#fafafa;
-            font-size:14px;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            gap:6px;
-            cursor:pointer;
-        ">
-        {button_text}
-        </button>
+            <button onclick="document.getElementById('audio_{hash(text)}').play()"
+            style="
+                width:100%;
+                height:38px;
+                padding:0 12px;
+                border-radius:8px;
+                border:1px solid rgba(250,250,250,0.2);
+                background-color:#0e1117;
+                color:#fafafa;
+                font-size:14px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                cursor:pointer;
+            ">
+            {button_text}
+            </button>
+        </div>
         """
 
-        components.html(html_code, height=38)
+        # ⚠️ 這裡是關鍵（修正裁切問題）
+        components.html(html_code, height=50)
 
 def create_action_button(label, key):
     html_code = f"""
@@ -584,6 +586,10 @@ else:
     @keyframes fadeIn {
         from {opacity:0; transform:translateY(15px);}
         to {opacity:1; transform:translateY(0);}
+    }
+
+    iframe {
+        margin-bottom: -8px;
     }
 
     </style>
