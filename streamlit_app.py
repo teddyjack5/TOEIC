@@ -120,15 +120,14 @@ def get_cloze_question(user_id):
     df['weight'] = df['weight'].clip(lower=0.1)
     target = df.sample(n=1, weights='weight').iloc[0]
     
-    # --- 資料清洗：移除括號內的中文 ---
+    # 原始內容 (含中文)
     raw_sentence = str(target['example'])
-    # 使用正則表達式移除 () 或 （） 及其內容
-    # [\(（].*?[\)）] 會匹配從左括號到右括號之間的所有文字
+    # 清洗內容 (純英文，僅用於出題計算)
     clean_sentence = re.sub(r'[\(（].*?[\)）]', '', raw_sentence).strip()
     
     word = str(target['word'])
     
-    # 使用清洗過的句子來製作填空題
+    # 使用清洗過的句子製作「挖空題目」
     blank_sentence = re.sub(re.escape(word), " ______ ", clean_sentence, flags=re.IGNORECASE)
     
     dist = pd.read_sql_query("""
@@ -141,13 +140,12 @@ def get_cloze_question(user_id):
     
     return {
         "id": int(target["id"]), 
-        "sentence": blank_sentence, 
+        "sentence": blank_sentence, # 這是給測驗介面顯示的（純英文且挖空）
         "answer": word,
         "options": options, 
-        "example": clean_sentence, # 這裡也回傳清洗後的純英文句子
-        "raw_example": raw_sentence, # 保留原始含中文的內容，若之後解析想顯示可用
-        "point": target["point"], 
-        "word": word
+        "example": raw_sentence,   # 【關鍵】這裡改回傳原始內容（含中文），用於解析
+        "word": word,
+        "point": target["point"]
     }
 
 # ==============================================================================
@@ -286,7 +284,6 @@ if mode == "測驗":
             st.session_state.wrong_list.append(q)
 
         st.markdown("### 📌 解析")
-        # --- 排版優化：比照 Google Sheet 換行 ---
         ex_text = str(q.get("example") or "").replace("\n", "<br>")
         pt_text = str(q.get("point") or "").replace("\n", "<br>")
         
