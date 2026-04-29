@@ -711,7 +711,7 @@ if mode == "🎯測驗":
             clean_sentence = re.sub(r'[\(（].*?[\)）]', '', q["sentence"])
             clean_sentence = re.sub(r'[^\x00-\x7F]+', '', clean_sentence)
             clean_sentence = re.sub(r'\s+', ' ', clean_sentence).strip()
-            st.markdown(f"**{i+1}. {q['sentence']}**")
+            st.markdown(f"**{i+1}. {clean_sentence}**")
 
             available_options = [
                 opt for opt in data["options"]
