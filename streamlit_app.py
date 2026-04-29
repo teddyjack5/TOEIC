@@ -13,7 +13,7 @@ from gtts import gTTS
 from streamlit_gsheets import GSheetsConnection
 
 # ==============================================================================
-# 初始化
+# --- 系統與資料庫初始化 ---
 # ==============================================================================
 st.set_page_config(page_title="多益學習APP", page_icon="📱", layout="centered")
 
@@ -21,11 +21,14 @@ DB_NAME = "toeic_pro.db"
 
 def auto_sync_monday():
     today = datetime.date.today()
-    week_id = today.strftime("%Y-%W")  # 第幾週
-    weekday = today.weekday()  # 0 = Monday
+    week_id = today.strftime("%Y-%W")
+    weekday = today.weekday()
 
+    # ==============================================================================
+    # 僅在週一執行同步
+    # ==============================================================================
     if weekday != 0:
-        return  # 不是週一 → 不做事
+        return
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -46,7 +49,6 @@ def auto_sync_monday():
         """, (week_id,))
 
         conn.commit()
-
         st.success(f"✅ 每週同步完成：{week_id}")
 
     conn.close()
@@ -63,9 +65,13 @@ def init_db():
                  (user_id TEXT, vocab_id INTEGER, wrong_count INTEGER DEFAULT 0, 
                   correct_streak INTEGER DEFAULT 0, last_tested TIMESTAMP,
                   PRIMARY KEY (user_id, vocab_id))''')
+    
     c.execute('''CREATE TABLE IF NOT EXISTS sync_meta
                  (id INTEGER PRIMARY KEY CHECK(id=1),
                   last_sync_week TEXT)''')
+    # ==============================================================================
+    # 擴充 FSRS 所需欄位 (忽略已存在的錯誤)
+    # ==============================================================================
     try:
         c.execute("ALTER TABLE user_progress ADD COLUMN next_review TIMESTAMP")
     except:
@@ -86,8 +92,9 @@ def init_db():
     
 init_db()
 auto_sync_monday()
+
 # ==============================================================================
-# SESSION SAFE INIT（🔥 修正核心）
+# --- Session State 初始化 ---
 # ==============================================================================
 def init_session():
     if "state" not in st.session_state:
@@ -110,9 +117,9 @@ def init_session():
         st.session_state.recall_state = "question"
     if "recall_input" not in st.session_state:
         st.session_state.recall_input = ""
-        
-# ==============================================================================
-# 同步
+
+# ==============================================================================    
+# --- Google Sheets 資料同步 ---
 # ==============================================================================
 def sync_data():
     conn_gs = st.connection("gsheets", type=GSheetsConnection)
@@ -122,7 +129,6 @@ def sync_data():
     c = conn_db.cursor()
 
     for _, row in df_gs.iterrows():
-
         c.execute("""
         INSERT INTO vocabs (word, pos, definition, example, point)
         VALUES (?, ?, ?, ?, ?)
@@ -141,9 +147,9 @@ def sync_data():
 
     conn_db.commit()
     conn_db.close()
-
+    
 # ==============================================================================
-# 出題（單字/填空邏輯維持不變）
+# --- 出題邏輯 (單字 / 填空 / 多題) ---
 # ==============================================================================
 def get_weighted_question(user_id, practice_mode):
     conn = sqlite3.connect(DB_NAME)
@@ -154,21 +160,27 @@ def get_weighted_question(user_id, practice_mode):
     LEFT JOIN user_progress p
     ON v.id = p.vocab_id AND p.user_id = ?
     """, conn, params=(user_id,))
+    
     if df.empty: return None
+    
     if practice_mode == "錯題":
         df = df[df['wrongs'] > 0]
         if df.empty: return None
+        
     df['weight'] = 1 + df['wrongs'] * 5 - df['streak'] * 1.5
     df['weight'] = df['weight'].clip(lower=0.1)
     target = df.sample(n=1, weights='weight').iloc[0]
+    
     dist = pd.read_sql_query("""
     SELECT word FROM vocabs 
     WHERE pos = ? AND word != ?
     ORDER BY RANDOM() LIMIT 3
     """, conn, params=(target['pos'], target['word']))
+    
     options = dist['word'].tolist() + [target['word']]
     random.shuffle(options)
     conn.close()
+    
     return {
         "id": int(target['id']), "word": target['word'], "definition": target['definition'],
         "example": target['example'], "point": target['point'], "pos": target['pos'],
@@ -190,14 +202,9 @@ def get_cloze_question(user_id):
     df['weight'] = df['weight'].clip(lower=0.1)
     target = df.sample(n=1, weights='weight').iloc[0]
     
-    # 原始內容 (含中文)
     raw_sentence = str(target['example'])
-    # 清洗內容 (純英文，僅用於出題計算)
     clean_sentence = re.sub(r'[\(（].*?[\)）]', '', raw_sentence).strip()
-    
     word = str(target['word'])
-    
-    # 使用清洗過的句子製作「挖空題目」
     blank_sentence = re.sub(re.escape(word), " ______ ", clean_sentence, flags=re.IGNORECASE)
     
     dist = pd.read_sql_query("""
@@ -210,24 +217,22 @@ def get_cloze_question(user_id):
     
     return {
         "id": int(target["id"]), 
-        "sentence": blank_sentence, # 這是給測驗介面顯示的（純英文且挖空）
+        "sentence": blank_sentence,
         "answer": word,
         "options": options, 
-        "example": raw_sentence,   # 【關鍵】這裡改回傳原始內容（含中文），用於解析
+        "example": raw_sentence,
         "word": word,
         "point": target["point"]
     }
 
 def get_multi_cloze(user_id, n=4):
     conn = sqlite3.connect(DB_NAME)
-
     df = pd.read_sql_query("""
         SELECT * FROM vocabs
         WHERE example IS NOT NULL AND example != ''
         ORDER BY RANDOM()
         LIMIT ?
     """, conn, params=(n,))
-
     conn.close()
 
     if len(df) < n:
@@ -244,12 +249,10 @@ def get_multi_cloze(user_id, n=4):
             str(row["example"]),
             flags=re.IGNORECASE
         )
-
         questions.append({
             "sentence": sentence,
             "answer": word
         })
-
         answers.append(word)
 
     random.shuffle(answers)
@@ -259,15 +262,13 @@ def get_multi_cloze(user_id, n=4):
         "options": answers
     }
 
-# ==============================================================================
-# 語音發音優化（穩定版 + 快取概念）
+# ==============================================================================    
+# --- 語音發音模組 (TTS) ---
 # ==============================================================================
 @st.cache_data(show_spinner=False)
 def get_tts_base64(text):
-    """將語音轉為 Base64 並快取，解決 200 Unknown 與 Lag 問題"""
     if not text: return None
     try:
-        # 只取英文部分發音
         english_only = " ".join(re.findall(r'[a-zA-Z0-9\s\.,\?!\'\";:-]+', text))
         if not english_only.strip(): return None
         tts = gTTS(text=english_only, lang='en')
@@ -280,11 +281,9 @@ def get_tts_base64(text):
 def create_audio_button(text, button_text, theme_mode):
     audio_base64 = get_tts_base64(text)
     if audio_base64:
-
         html_code = f"""
         <div style="display:flex;align-items:center;justify-content:center;height:100%;">
             <audio id="audio_{hash(text)}" src="data:audio/mp3;base64,{audio_base64}"></audio>
-
             <button onclick="document.getElementById('audio_{hash(text)}').play()"
             style="
                 width:100%;
@@ -304,8 +303,6 @@ def create_audio_button(text, button_text, theme_mode):
             </button>
         </div>
         """
-
-        # ⚠️ 這裡是關鍵（修正裁切問題）
         components.html(html_code, height=50)
 
 def create_action_button(label, key):
@@ -325,22 +322,12 @@ def create_action_button(label, key):
     """
     return components.html(html_code, height=55)
 
-# ------------------------------------------------------------------------------
-# 🧠 FSRS-like memory score (simple version)
-# ------------------------------------------------------------------------------
+# --- FSRS 記憶排程演算法 ---
 def calculate_memory_strength(wrong_count, correct_streak):
-    """
-    模擬記憶強度（越高越記得）
-    """
     return max(0.1, correct_streak * 2 - wrong_count * 1.5)
 
-
-# ------------------------------------------------------------------------------
-# 🔁 取得「快忘記的單字」
-# ------------------------------------------------------------------------------
 def get_review_words(user_id):
     conn = sqlite3.connect(DB_NAME)
-
     df = pd.read_sql_query("""
         SELECT v.*, 
                IFNULL(p.wrong_count,0) as wrongs,
@@ -349,7 +336,6 @@ def get_review_words(user_id):
         LEFT JOIN user_progress p
         ON v.id = p.vocab_id AND p.user_id = ?
     """, conn, params=(user_id,))
-
     conn.close()
 
     if df.empty:
@@ -359,24 +345,14 @@ def get_review_words(user_id):
         lambda x: calculate_memory_strength(x["wrongs"], x["streak"]),
         axis=1
     )
-
-    # 越低 = 越容易忘
     df = df.sort_values("memory_score").head(10)
-
     return df.to_dict("records")
 
-
-# ------------------------------------------------------------------------------
-# 🧩 Recall 測驗（不用選項，直接回想）
-# ------------------------------------------------------------------------------
 def get_recall_question(user_id):
     words = get_review_words(user_id)
-
     if not words:
         return None
-
     target = random.choice(words)
-
     return {
         "id": target["id"],
         "type": "recall",
@@ -387,14 +363,7 @@ def get_recall_question(user_id):
     }
 
 def update_fsrs(user_id, vocab_id, rating):
-    """
-    rating:
-    0 = 錯
-    1 = 困難
-    2 = 普通
-    3 = 簡單
-    """
-
+    # Rating 說明：0=錯, 1=困難, 2=普通, 3=簡單
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
@@ -408,19 +377,15 @@ def update_fsrs(user_id, vocab_id, rating):
     else:
         interval, ease = 1, 2.5
 
-    # === FSRS-lite 更新規則 ===
-    if rating == 0:  # 錯
+    if rating == 0:
         interval = 1
         ease = max(1.3, ease - 0.2)
-
-    elif rating == 1:  # 困難
+    elif rating == 1:
         interval = max(1, int(interval * 1.2))
         ease = max(1.3, ease - 0.1)
-
-    elif rating == 2:  # 普通
+    elif rating == 2:
         interval = int(interval * ease)
-
-    elif rating == 3:  # 簡單
+    elif rating == 3:
         interval = int(interval * ease * 1.3)
         ease += 0.05
 
@@ -442,40 +407,38 @@ def update_fsrs(user_id, vocab_id, rating):
 
 def get_due_words(user_id):
     conn = sqlite3.connect(DB_NAME)
-
     df = pd.read_sql_query("""
         SELECT v.*, p.next_review
         FROM vocabs v
         JOIN user_progress p ON v.id = p.vocab_id
         WHERE p.user_id = ?
     """, conn, params=(user_id,))
-
     conn.close()
 
     if df.empty:
         return []
 
     now = datetime.datetime.now()
-
     df["next_review"] = pd.to_datetime(df["next_review"], errors="coerce")
-
-    due = df[
-        (df["next_review"].isna()) | (df["next_review"] <= now)
-    ]
-
+    due = df[(df["next_review"].isna()) | (df["next_review"] <= now)]
+    
     return due.to_dict("records")
-# ==============================================================================
-# Sidebar
+
+# ==============================================================================    
+# --- 側邊欄 (Sidebar) 設定 ---
 # ==============================================================================
 st.sidebar.title("設定")
 user_id = st.sidebar.text_input("User ID")
-mode = st.sidebar.radio("模式", ["📚 單字瀏覽","🎯測驗","🧠 記憶強化","🔁 需加強複習","🔁 今日複習", "📊學習進度分析",  "新增單字庫"]) # 新增分析選項
+mode = st.sidebar.radio("模式", ["📚 單字瀏覽","🎯測驗","🧠 記憶強化","🔁 需加強複習","🔁 今日複習", "📊學習進度分析",  "新增單字庫"])
+
 old_practice_mode = st.session_state.get("last_practice_mode")
 practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "多題填空","錯題"])
+
 if old_practice_mode != practice_mode:
     st.session_state.q = None
     st.session_state.state = "q"
     st.session_state.last_practice_mode = practice_mode
+    
 theme_mode = st.sidebar.radio("主題", ["深色","淺色"])
 
 if st.sidebar.button("同步單字"):
@@ -485,211 +448,49 @@ if st.sidebar.button("同步單字"):
 init_session()
 
 # ==============================================================================
-# CSS
+# --- UI 與 CSS 樣式設定 ---
 # ==============================================================================
 if theme_mode == "深色":
-
     st.markdown("""
     <style>
-
-    body {
-        background: radial-gradient(circle at top, #0f172a, #020617);
-        color: white;
-    }
-
-    .card { 
-        background: linear-gradient(135deg,#1e293b,#020617);
-        padding:30px; 
-        border-radius:22px; 
-        text-align:center; 
-        margin-bottom:20px;
-        box-shadow:0 0 25px rgba(0,255,200,0.15);
-        animation: fadeIn 0.4s ease;
-        color: white;
-    }
-
-    .big { 
-        font-size:26px; 
-        color:white; 
-        font-weight:600;
-    }
-
-    .hud {
-        display:flex;
-        justify-content:space-between;
-        background:rgba(15,23,42,0.9);
-        padding:12px 20px;
-        border-radius:16px;
-        margin-bottom:15px;
-        box-shadow:0 0 15px rgba(0,0,0,0.6);
-        backdrop-filter: blur(10px);
-        color:white;
-    }
-
-    .xp-bar {
-        height:8px;
-        background:#1e293b;
-        border-radius:10px;
-        overflow:hidden;
-        margin-top:6px;
-    }
-
-    .xp-fill {
-        height:100%;
-        background:linear-gradient(90deg,#22c55e,#4ade80);
-        width:60%;
-    }
-
-    .option-btn button {
-        width:100%;
-        padding:16px;
-        border-radius:16px;
-        border:none;
-        font-size:16px;
-        font-weight:500;
-        background: linear-gradient(135deg,#1e293b,#334155);
-        color:white;
-        cursor:pointer;
-        transition: all 0.2s ease;
-        margin-bottom:8px;
-    }
-
-    .option-btn button:hover {
-        transform: scale(1.06);
-        background: linear-gradient(135deg,#2563eb,#1d4ed8);
-        box-shadow:0 8px 20px rgba(37,99,235,0.5);
-    }
-
-    .option-btn button:active {
-        transform: scale(0.96);
-    }
-
-    .note-box { 
-        line-height: 1.8; 
-        font-size: 16px; 
-        background: #1e1e1e; 
-        padding: 15px; 
-        border-radius: 10px; 
-        border-left: 5px solid #00C853; 
-        color:white;
-    }
-
-    @keyframes fadeIn {
-        from {opacity:0; transform:translateY(15px);}
-        to {opacity:1; transform:translateY(0);}
-    }
-
+    body { background: radial-gradient(circle at top, #0f172a, #020617); color: white; }
+    .card { background: linear-gradient(135deg,#1e293b,#020617); padding:30px; border-radius:22px; text-align:center; margin-bottom:20px; box-shadow:0 0 25px rgba(0,255,200,0.15); animation: fadeIn 0.4s ease; color: white; }
+    .big { font-size:26px; color:white; font-weight:600; }
+    .hud { display:flex; justify-content:space-between; background:rgba(15,23,42,0.9); padding:12px 20px; border-radius:16px; margin-bottom:15px; box-shadow:0 0 15px rgba(0,0,0,0.6); backdrop-filter: blur(10px); color:white; }
+    .xp-bar { height:8px; background:#1e293b; border-radius:10px; overflow:hidden; margin-top:6px; }
+    .xp-fill { height:100%; background:linear-gradient(90deg,#22c55e,#4ade80); width:60%; }
+    .option-btn button { width:100%; padding:16px; border-radius:16px; border:none; font-size:16px; font-weight:500; background: linear-gradient(135deg,#1e293b,#334155); color:white; cursor:pointer; transition: all 0.2s ease; margin-bottom:8px; }
+    .option-btn button:hover { transform: scale(1.06); background: linear-gradient(135deg,#2563eb,#1d4ed8); box-shadow:0 8px 20px rgba(37,99,235,0.5); }
+    .option-btn button:active { transform: scale(0.96); }
+    .note-box { line-height: 1.8; font-size: 16px; background: #1e1e1e; padding: 15px; border-radius: 10px; border-left: 5px solid #00C853; color:white; }
+    @keyframes fadeIn { from {opacity:0; transform:translateY(15px);} to {opacity:1; transform:translateY(0);} }
     </style>
     """, unsafe_allow_html=True)
-
 else:
-
     st.markdown("""
     <style>
-
-    body {
-        background: #f5f7fb;
-        color: #111;
-    }
-
-    .card { 
-        background: white;
-        padding:30px; 
-        border-radius:22px; 
-        text-align:center; 
-        margin-bottom:20px;
-        box-shadow:0 6px 20px rgba(0,0,0,0.08);
-        animation: fadeIn 0.4s ease;
-        color: #111;
-    }
-
-    .big { 
-        font-size:26px; 
-        color:#111;
-        font-weight:600;
-    }
-
-    .hud {
-        display:flex;
-        justify-content:space-between;
-        background:white;
-        padding:12px 20px;
-        border-radius:16px;
-        margin-bottom:15px;
-        box-shadow:0 4px 12px rgba(0,0,0,0.08);
-        color:#111;
-    }
-
-    .xp-bar {
-        height:8px;
-        background:#e5e7eb;
-        border-radius:10px;
-        overflow:hidden;
-        margin-top:6px;
-    }
-
-    .xp-fill {
-        height:100%;
-        background:linear-gradient(90deg,#22c55e,#4ade80);
-        width:60%;
-    }
-
-    .option-btn button {
-        width:100%;
-        padding:16px;
-        border-radius:16px;
-        border:none;
-        font-size:16px;
-        font-weight:500;
-        background: #f3f4f6;
-        color:#111;
-        cursor:pointer;
-        transition: all 0.2s ease;
-        margin-bottom:8px;
-    }
-
-    .option-btn button:hover {
-        transform: scale(1.06);
-        background: #dbeafe;
-        box-shadow:0 8px 20px rgba(0,0,0,0.1);
-    }
-
-    .option-btn button:active {
-        transform: scale(0.96);
-    }
-
-    .note-box { 
-        line-height: 1.8; 
-        font-size: 16px; 
-        background: #ffffff;
-        padding: 15px; 
-        border-radius: 10px; 
-        border-left: 5px solid #00C853; 
-        color:#111;
-        box-shadow:0 2px 10px rgba(0,0,0,0.05);
-    }
-
-    @keyframes fadeIn {
-        from {opacity:0; transform:translateY(15px);}
-        to {opacity:1; transform:translateY(0);}
-    }
-
-    iframe {
-        margin-bottom: -8px;
-    }
-
+    body { background: #f5f7fb; color: #111; }
+    .card { background: white; padding:30px; border-radius:22px; text-align:center; margin-bottom:20px; box-shadow:0 6px 20px rgba(0,0,0,0.08); animation: fadeIn 0.4s ease; color: #111; }
+    .big { font-size:26px; color:#111; font-weight:600; }
+    .hud { display:flex; justify-content:space-between; background:white; padding:12px 20px; border-radius:16px; margin-bottom:15px; box-shadow:0 4px 12px rgba(0,0,0,0.08); color:#111; }
+    .xp-bar { height:8px; background:#e5e7eb; border-radius:10px; overflow:hidden; margin-top:6px; }
+    .xp-fill { height:100%; background:linear-gradient(90deg,#22c55e,#4ade80); width:60%; }
+    .option-btn button { width:100%; padding:16px; border-radius:16px; border:none; font-size:16px; font-weight:500; background: #f3f4f6; color:#111; cursor:pointer; transition: all 0.2s ease; margin-bottom:8px; }
+    .option-btn button:hover { transform: scale(1.06); background: #dbeafe; box-shadow:0 8px 20px rgba(0,0,0,0.1); }
+    .option-btn button:active { transform: scale(0.96); }
+    .note-box { line-height: 1.8; font-size: 16px; background: #ffffff; padding: 15px; border-radius: 10px; border-left: 5px solid #00C853; color:#111; box-shadow:0 2px 10px rgba(0,0,0,0.05); }
+    @keyframes fadeIn { from {opacity:0; transform:translateY(15px);} to {opacity:1; transform:translateY(0);} }
+    iframe { margin-bottom: -8px; }
     </style>
     """, unsafe_allow_html=True)
+
 # ==============================================================================
-# 主流程：測驗
+# --- 主流程：🎯 測驗 ---
 # ==============================================================================
 if mode == "🎯測驗":
 
-    # =========================
-    # 🧩 多題填空模式
-    # =========================
+    # 模組：多題填空
     if practice_mode == "多題填空":
-
         if not user_id:
             st.warning("請輸入User ID")
             st.stop()
@@ -730,7 +531,6 @@ if mode == "🎯測驗":
                 st.rerun()
         else:
             score = 0
-
             for i, q in enumerate(data["questions"]):
                 user_ans = st.session_state.multi_answers[i]
                 correct = q["answer"]
@@ -748,19 +548,14 @@ if mode == "🎯測驗":
                 del st.session_state.multi_answers
                 st.session_state.multi_submitted = False
 
-                # 🔥 清除 selectbox cache
                 for i in range(4):
                     key = f"multi_{i}"
                     if key in st.session_state:
                         del st.session_state[key]
-
                 st.rerun()
-
         st.stop()
 
-    # =========================
-    # 🎯 原本單題模式（不動）
-    # =========================
+    # 模組：單題測驗
     if not user_id:
         st.warning("請輸入User ID")
         st.stop()
@@ -786,17 +581,15 @@ if mode == "🎯測驗":
     </div>
     <div>🔥 {st.session_state.streak}</div>
     <div>📊 {st.session_state.count}</div>
-</div>
-""", unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
 
     display_text = q.get("sentence", q.get("definition", ""))
     st.markdown(f'<div class="card"><div class="big">{display_text}</div></div>', unsafe_allow_html=True)
 
     if st.session_state.state == "q":
         for i, opt in enumerate(q["options"]):
-
             icon = ["","","",""][i % 4]
-
             st.markdown('<div class="option-btn">', unsafe_allow_html=True)
 
             if st.button(f"{icon} {opt}", key=f"opt_{i}", use_container_width=True):
@@ -807,7 +600,7 @@ if mode == "🎯測驗":
                 correct = q.get("answer") or q.get("correct")
                 is_correct = (opt == correct)
 
-                st.session_state.is_correct = is_correct   # ⭐關鍵修正
+                st.session_state.is_correct = is_correct
 
                 if is_correct:
                     conn.execute("""
@@ -826,7 +619,6 @@ if mode == "🎯測驗":
 
                 conn.commit()
                 conn.close()
-
                 st.rerun()
 
         st.markdown('</div>', unsafe_allow_html=True)
@@ -865,7 +657,7 @@ if mode == "🎯測驗":
             st.rerun()
 
 # ==============================================================================
-# 主流程：學習進度分析（新增整合內容）
+# --- 主流程：📊 學習進度分析 ---
 # ==============================================================================
 elif mode == "📊學習進度分析":
     st.subheader("📊 我的學習戰報")
@@ -906,7 +698,7 @@ elif mode == "📊學習進度分析":
             }, hide_index=True, use_container_width=True)
 
 # ==============================================================================
-# 新增單字
+# --- 主流程：新增單字庫 ---
 # ==============================================================================
 elif mode == "新增單字庫":
     st.subheader("新增單字")
@@ -919,20 +711,15 @@ elif mode == "新增單字庫":
         if st.form_submit_button("送出"):
             requests.post(url, json={"word": w, "definition": d, "example": ex, "point": pt})
             st.success("完成")
-# ==============================================================================
-# 🧠 新增 MODE：學習科學入口
-# ==============================================================================
-elif mode == "🧠 記憶強化":
 
+# --- 主流程：🧠 記憶強化 ---
+elif mode == "🧠 記憶強化":
     st.title("🧠 記憶強化模式（Learning Science Mode）")
 
     if not user_id:
         st.warning("請輸入 User ID")
         st.stop()
 
-    # =========================
-    # 初始化 state
-    # =========================
     if "recall_state" not in st.session_state:
         st.session_state.recall_state = "question"
 
@@ -945,26 +732,17 @@ elif mode == "🧠 記憶強化":
         st.info("目前沒有需要複習的單字 🎉")
         st.stop()
 
-    # =========================
-    # 顯示題目
-    # =========================
     st.markdown(f"""
     <div class="card">
         <div class="big">💡 {q['definition']}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    # =========================
-    # 作答階段
-    # =========================
     if st.session_state.recall_state == "question":
-
         user_input = st.text_input("請輸入英文單字（Recall）", key="recall_input")
 
         if st.button("提交"):
-
             correct = user_input.strip().lower() == q["answer"].lower()
-
             conn = sqlite3.connect(DB_NAME)
 
             if correct:
@@ -986,42 +764,27 @@ elif mode == "🧠 記憶強化":
 
             conn.commit()
             conn.close()
-
-            # 👉 只切狀態，不 rerun 換題
             st.session_state.recall_state = "result"
 
-    # =========================
-    # 結果階段（重點）
-    # =========================
     if st.session_state.recall_state == "result":
-
-        # 顯示對錯結果（固定存在）
         st.markdown(f"## {st.session_state.recall_result}")
-
         st.markdown("### 📌 例句")
         st.write(q.get("example", ""))
-
         st.markdown("### 🎯 考點")
         st.write(q.get("point", ""))
 
-        # 下一題才換
         if st.button("下一題 ➜"):
-
             st.session_state.recall_q = get_recall_question(user_id)
             st.session_state.recall_state = "question"
-
-            # 清掉輸入狀態
+            
             if "recall_input" in st.session_state:
                 st.session_state.recall_input = ""
-
             st.rerun()
 
 # ==============================================================================
-# 🔁 今日複習 Dashboard
+# --- 主流程：🔁 今日複習 ---
 # ==============================================================================
-
 elif mode == "🔁 今日複習":
-
     st.title("🔁 今日複習清單")
 
     if not user_id:
@@ -1035,18 +798,18 @@ elif mode == "🔁 今日複習":
         st.stop()
 
     for w in words:
-
         st.markdown(f"""
         <div class="card">
             <div class="big">{w['word']}</div>
             <p>{w['definition']}</p>
         </div>
         """, unsafe_allow_html=True)
-
         st.progress(min(w.get("correct_streak", 0) / 5, 1.0))
 
+# ==============================================================================
+# --- 主流程：🔁 需加強複習 (FSRS) ---
+# ==============================================================================
 elif mode == "🔁 需加強複習":
-
     st.title("🔁 FSRS 智慧複習")
 
     if not user_id:
@@ -1081,47 +844,40 @@ elif mode == "🔁 需加強複習":
         update_fsrs(user_id, q["id"], 0)
         st.session_state.fsrs_q = None
         st.rerun()
-
     if col2.button("😵 困難"):
         update_fsrs(user_id, q["id"], 1)
         st.session_state.fsrs_q = None
         st.rerun()
-
     if col3.button("🙂 普通"):
         update_fsrs(user_id, q["id"], 2)
         st.session_state.fsrs_q = None
         st.rerun()
-
     if col4.button("😎 簡單"):
         update_fsrs(user_id, q["id"], 3)
         st.session_state.fsrs_q = None
         st.rerun()
 
 # ==============================================================================
-# 📚 單字瀏覽（Google Sheet）
+# --- 主流程：📚 單字瀏覽 ---
 # ==============================================================================
 elif mode == "📚 單字瀏覽":
-
     st.title("📚 單字記憶卡（Flashcard Mode）")
 
     conn_gs = st.connection("gsheets", type=GSheetsConnection)
 
-    # 只載入一次（超重要，不然每次 rerun 都重抓）
     if "flash_df" not in st.session_state:
         df = conn_gs.read()
-
         if df.empty:
             st.warning("目前沒有單字資料")
             st.stop()
 
-        st.session_state.flash_df = df.sample(frac=1).reset_index(drop=True)  # 🔥 隨機打亂
+        st.session_state.flash_df = df.sample(frac=1).reset_index(drop=True)
         st.session_state.flash_index = 0
         st.session_state.show_answer = False
 
     df = st.session_state.flash_df
     i = st.session_state.flash_index
 
-    # 防呆
     if i >= len(df):
         st.success("🎉 已經看完所有單字！")
         if st.button("🔄 重新開始"):
@@ -1132,9 +888,6 @@ elif mode == "📚 單字瀏覽":
 
     row = df.iloc[i]
 
-    # =========================
-    # 卡片 UI
-    # =========================
     st.markdown(f"""
     <div class="card">
         <div class="big">{row['word']}</div>
@@ -1142,22 +895,15 @@ elif mode == "📚 單字瀏覽":
     </div>
     """, unsafe_allow_html=True)
 
-    # =========================
-    # 顯示答案
-    # =========================
     if not st.session_state.show_answer:
-
         col1, col2 = st.columns(2)
-
         with col1:
             if st.button("👀 顯示解釋", use_container_width=True):
                 st.session_state.show_answer = True
                 st.rerun()
         with col2:
             create_audio_button(row.get("word",""), "🔊 單字", theme_mode)
-
     else:
-
         st.markdown(f"""
         <div class="note-box">
             <b>Definition：</b><br>
@@ -1165,15 +911,12 @@ elif mode == "📚 單字瀏覽":
         </div>
         """, unsafe_allow_html=True)
 
-        # 下一張
         col1, col2 = st.columns(2)
-
         with col1:
             if st.button("➡️ 下一張"):
                 st.session_state.flash_index += 1
                 st.session_state.show_answer = False
                 st.rerun()
-
         with col2:
             if st.button("⬅️ 上一張"):
                 if st.session_state.flash_index > 0:
@@ -1181,9 +924,5 @@ elif mode == "📚 單字瀏覽":
                     st.session_state.show_answer = False
                     st.rerun()
 
-    # =========================
-    # 進度條
-    # =========================
     st.progress((i + 1) / len(df))
     st.caption(f"{i+1} / {len(df)}")
-
