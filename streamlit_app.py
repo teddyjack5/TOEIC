@@ -218,6 +218,47 @@ def get_cloze_question(user_id):
         "point": target["point"]
     }
 
+def get_multi_cloze(user_id, n=4):
+    conn = sqlite3.connect(DB_NAME)
+
+    df = pd.read_sql_query("""
+        SELECT * FROM vocabs
+        WHERE example IS NOT NULL AND example != ''
+        ORDER BY RANDOM()
+        LIMIT ?
+    """, conn, params=(n,))
+
+    conn.close()
+
+    if len(df) < n:
+        return None
+
+    questions = []
+    answers = []
+
+    for _, row in df.iterrows():
+        word = row["word"]
+        sentence = re.sub(
+            re.escape(word),
+            "______",
+            str(row["example"]),
+            flags=re.IGNORECASE
+        )
+
+        questions.append({
+            "sentence": sentence,
+            "answer": word
+        })
+
+        answers.append(word)
+
+    random.shuffle(answers)
+
+    return {
+        "questions": questions,
+        "options": answers
+    }
+
 # ==============================================================================
 # 語音發音優化（穩定版 + 快取概念）
 # ==============================================================================
@@ -647,6 +688,80 @@ else:
 # 主流程：測驗
 # ==============================================================================
 if mode == "🎯測驗":
+
+    # =========================
+    # 🧩 多題填空模式
+    # =========================
+    if practice_mode == "多題填空":
+
+        if not user_id:
+            st.warning("請輸入User ID")
+            st.stop()
+
+        if "multi_q" not in st.session_state or st.session_state.multi_q is None:
+            st.session_state.multi_q = get_multi_cloze(user_id)
+            st.session_state.multi_answers = [""] * 4
+            st.session_state.multi_submitted = False
+
+        data = st.session_state.multi_q
+
+        if data is None:
+            st.warning("題目不足")
+            st.stop()
+
+        st.markdown("## 🧩 多題填空挑戰")
+
+        for i, q in enumerate(data["questions"]):
+            st.markdown(f"**{i+1}. {q['sentence']}**")
+
+            available_options = [
+                opt for opt in data["options"]
+                if opt not in st.session_state.multi_answers[:i]
+            ]
+
+            st.session_state.multi_answers[i] = st.selectbox(
+                f"答案 {i+1}",
+                [""] + available_options,
+                key=f"multi_{i}"
+            )
+
+        if not st.session_state.multi_submitted:
+            if st.button("提交答案"):
+                st.session_state.multi_submitted = True
+                st.rerun()
+        else:
+            score = 0
+
+            for i, q in enumerate(data["questions"]):
+                user_ans = st.session_state.multi_answers[i]
+                correct = q["answer"]
+
+                if user_ans == correct:
+                    st.success(f"{i+1} ✅ 正確")
+                    score += 1
+                else:
+                    st.error(f"{i+1} ❌ 正確是 {correct}")
+
+            st.markdown(f"### 🎯 得分：{score} / 4")
+
+            if st.button("下一組"):
+                del st.session_state.multi_q
+                del st.session_state.multi_answers
+                st.session_state.multi_submitted = False
+
+                # 🔥 清除 selectbox cache
+                for i in range(4):
+                    key = f"multi_{i}"
+                    if key in st.session_state:
+                        del st.session_state[key]
+
+                st.rerun()
+
+        st.stop()
+
+    # =========================
+    # 🎯 原本單題模式（不動）
+    # =========================
     if not user_id:
         st.warning("請輸入User ID")
         st.stop()
@@ -1072,6 +1187,63 @@ elif mode == "📚 單字瀏覽":
     # =========================
     st.progress((i + 1) / len(df))
     st.caption(f"{i+1} / {len(df)}")
+
+elif mode == "🧩 多題填空":
+
+    if not user_id:
+        st.warning("請輸入User ID")
+        st.stop()
+
+    if "multi_q" not in st.session_state:
+        st.session_state.multi_q = get_multi_cloze(user_id)
+        st.session_state.multi_answers = [""] * 4
+        st.session_state.multi_submitted = False
+
+    data = st.session_state.multi_q
+
+    if data is None:
+        st.warning("題目不足")
+        st.stop()
+
+    st.subheader("🧩 多題填空挑戰")
+
+    # 題目
+    for i, q in enumerate(data["questions"]):
+        st.markdown(f"**{i+1}. {q['sentence']}**")
+
+        st.session_state.multi_answers[i] = st.selectbox(
+            f"選擇答案 {i+1}",
+            [""] + data["options"],
+            key=f"multi_{i}"
+        )
+
+    # 提交
+    if not st.session_state.multi_submitted:
+        if st.button("提交答案"):
+            st.session_state.multi_submitted = True
+            st.rerun()
+
+    # 顯示結果
+    else:
+        score = 0
+
+        for i, q in enumerate(data["questions"]):
+            user_ans = st.session_state.multi_answers[i]
+            correct = q["answer"]
+
+            if user_ans == correct:
+                st.success(f"{i+1} ✅ 正確")
+                score += 1
+            else:
+                st.error(f"{i+1} ❌ 正確是 {correct}")
+
+        st.markdown(f"### 🎯 得分：{score} / 4")
+
+        if st.button("下一組"):
+            del st.session_state.multi_q
+            del st.session_state.multi_answers
+            st.session_state.multi_submitted = False
+            st.rerun()
 
 
 
