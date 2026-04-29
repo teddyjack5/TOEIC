@@ -708,6 +708,9 @@ if mode == "🎯測驗":
         st.markdown("## 🧩 多題填空挑戰")
 
         for i, q in enumerate(data["questions"]):
+            clean_sentence = re.sub(r'[\(（].*?[\)）]', '', q["sentence"])
+            clean_sentence = re.sub(r'[^\x00-\x7F]+', '', clean_sentence)
+            clean_sentence = re.sub(r'\s+', ' ', clean_sentence).strip()
             st.markdown(f"**{i+1}. {q['sentence']}**")
 
             available_options = [
