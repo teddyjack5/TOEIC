@@ -471,7 +471,7 @@ st.sidebar.title("設定")
 user_id = st.sidebar.text_input("User ID")
 mode = st.sidebar.radio("模式", ["📚 單字瀏覽","🎯測驗","🧠 記憶強化","🔁 需加強複習","🔁 今日複習", "📊學習進度分析",  "新增單字庫"]) # 新增分析選項
 old_practice_mode = st.session_state.get("last_practice_mode")
-practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "錯題"])
+practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "多題填空","錯題"])
 if old_practice_mode != practice_mode:
     st.session_state.q = None
     st.session_state.state = "q"
@@ -487,10 +487,6 @@ init_session()
 # ==============================================================================
 # CSS
 # ==============================================================================
-# ==============================================================================
-# CSS（✔ 修正：深色 / 淺色模式切換）
-# ==============================================================================
-
 if theme_mode == "深色":
 
     st.markdown("""
@@ -1187,63 +1183,4 @@ elif mode == "📚 單字瀏覽":
     # =========================
     st.progress((i + 1) / len(df))
     st.caption(f"{i+1} / {len(df)}")
-
-elif mode == "🧩 多題填空":
-
-    if not user_id:
-        st.warning("請輸入User ID")
-        st.stop()
-
-    if "multi_q" not in st.session_state:
-        st.session_state.multi_q = get_multi_cloze(user_id)
-        st.session_state.multi_answers = [""] * 4
-        st.session_state.multi_submitted = False
-
-    data = st.session_state.multi_q
-
-    if data is None:
-        st.warning("題目不足")
-        st.stop()
-
-    st.subheader("🧩 多題填空挑戰")
-
-    # 題目
-    for i, q in enumerate(data["questions"]):
-        st.markdown(f"**{i+1}. {q['sentence']}**")
-
-        st.session_state.multi_answers[i] = st.selectbox(
-            f"選擇答案 {i+1}",
-            [""] + data["options"],
-            key=f"multi_{i}"
-        )
-
-    # 提交
-    if not st.session_state.multi_submitted:
-        if st.button("提交答案"):
-            st.session_state.multi_submitted = True
-            st.rerun()
-
-    # 顯示結果
-    else:
-        score = 0
-
-        for i, q in enumerate(data["questions"]):
-            user_ans = st.session_state.multi_answers[i]
-            correct = q["answer"]
-
-            if user_ans == correct:
-                st.success(f"{i+1} ✅ 正確")
-                score += 1
-            else:
-                st.error(f"{i+1} ❌ 正確是 {correct}")
-
-        st.markdown(f"### 🎯 得分：{score} / 4")
-
-        if st.button("下一組"):
-            del st.session_state.multi_q
-            del st.session_state.multi_answers
-            st.session_state.multi_submitted = False
-            st.rerun()
-
-
 
