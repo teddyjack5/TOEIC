@@ -225,43 +225,63 @@ def get_cloze_question(user_id):
         "point": target["point"]
     }
 
-def get_multi_cloze(user_id, n=4):
+def get_multi_cloze(user_id):
     conn = sqlite3.connect(DB_NAME)
+
     df = pd.read_sql_query("""
-        SELECT * FROM vocabs
+        SELECT *
+        FROM vocabs
         WHERE example IS NOT NULL AND example != ''
         ORDER BY RANDOM()
-        LIMIT ?
-    """, conn, params=(n,))
+        LIMIT 20
+    """, conn)
+
     conn.close()
 
-    if len(df) < n:
+    if len(df) < 4:
         return None
 
-    questions = []
-    answers = []
+    # 👉 隨機挑4題（避免重複）
+    selected = df.sample(4)
 
-    for _, row in df.iterrows():
-        word = row["word"]
+    questions = []
+
+    for _, row in selected.iterrows():
+        raw = str(row["example"])
+
+        # 🔥 清掉中文
+        clean = re.sub(r'[\(（].*?[\)）]', '', raw)
+        clean = re.sub(r'[^\x00-\x7F]+', '', clean)
+        clean = re.sub(r'\s+', ' ', clean).strip()
+
+        word = str(row["word"])
+        pos = str(row["pos"])
+
+        # 👉 挖空
         sentence = re.sub(
             re.escape(word),
-            "______",
-            str(row["example"]),
+            " ______ ",
+            clean,
             flags=re.IGNORECASE
         )
+
+        # 👉 抓同詞性干擾（重點）
+        distractors = df[
+            (df["pos"] == pos) & (df["word"] != word)
+        ]["word"].sample(min(3, len(df))).tolist()
+
+        options = distractors + [word]
+        random.shuffle(options)
+
         questions.append({
             "sentence": sentence,
-            "answer": word
+            "answer": word,
+            "options": options   # ⭐ 每題自己的選項
         })
-        answers.append(word)
-
-    random.shuffle(answers)
 
     return {
-        "questions": questions,
-        "options": answers
+        "questions": questions
     }
-
 # ==============================================================================    
 # --- 語音發音模組 (TTS) ---
 # ==============================================================================
@@ -514,14 +534,9 @@ if mode == "🎯測驗":
             clean_sentence = re.sub(r'\s+', ' ', clean_sentence).strip()
             st.markdown(f"**{i+1}. {clean_sentence}**")
 
-            available_options = [
-                opt for opt in data["options"]
-                if opt not in st.session_state.multi_answers[:i]
-            ]
-
             st.session_state.multi_answers[i] = st.selectbox(
                 f"答案 {i+1}",
-                [""] + available_options,
+                [""] + q["options"],
                 key=f"multi_{i}"
             )
 
