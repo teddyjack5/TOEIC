@@ -266,8 +266,6 @@ def get_multi_cloze(user_id):
         )
 
         # 👉 抓同詞性干擾（重點）
-        distractors = df[
-            (df["pos"] == pos) & (df["word"] != word)
         pool = df[
             (df["pos"] == pos) & (df["word"] != word)
         ]["word"].tolist()
@@ -275,7 +273,8 @@ def get_multi_cloze(user_id):
         if len(pool) < 3:
             pool += df[df["word"] != word]["word"].tolist()
 
-        pool = list(set(pool))  # 去重
+        pool = list(set(pool))
+        pool = [w for w in pool if w != word]
 
         distractors = random.sample(pool, min(3, len(pool)))
 
