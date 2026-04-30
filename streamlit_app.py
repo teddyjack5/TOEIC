@@ -492,7 +492,7 @@ if mode == "🎯測驗":
     # 模組：多題填空
     if practice_mode == "多題填空":
         if not user_id:
-            st.warning("請輸入User ID 使用同一個ID會有之前的順練紀錄")
+            st.warning("請輸入User ID 使用同一個ID會有之前的訓練紀錄")
             st.stop()
 
         if "multi_q" not in st.session_state or st.session_state.multi_q is None:
@@ -557,7 +557,7 @@ if mode == "🎯測驗":
 
     # 模組：單題測驗
     if not user_id:
-        st.warning("請輸入User ID 使用同一個ID會有之前的順練紀錄")
+        st.warning("請輸入User ID 使用同一個ID會有之前的訓練紀錄")
         st.stop()
 
     TOTAL = 10
@@ -717,7 +717,7 @@ elif mode == "🧠 記憶強化":
     st.title("🧠 記憶強化模式（Learning Science Mode）")
 
     if not user_id:
-        st.warning("請輸入 User ID 使用同一個ID會有之前的順練紀錄")
+        st.warning("請輸入 User ID 使用同一個ID會有之前的訓練紀錄")
         st.stop()
 
     if "recall_state" not in st.session_state:
@@ -788,7 +788,7 @@ elif mode == "🔁 今日複習":
     st.title("🔁 今日複習清單")
 
     if not user_id:
-        st.warning("請輸入 User ID 使用同一個ID會有之前的順練紀錄")
+        st.warning("請輸入 User ID 使用同一個ID會有之前的訓練紀錄")
         st.stop()
 
     words = get_review_words(user_id)
@@ -813,7 +813,7 @@ elif mode == "🔁 需加強複習":
     st.title("🔁 FSRS 智慧複習")
 
     if not user_id:
-        st.warning("請輸入 User ID 使用同一個ID會有之前的順練紀錄")
+        st.warning("請輸入 User ID 使用同一個ID會有之前的訓練紀錄")
         st.stop()
 
     if "fsrs_q" not in st.session_state:
