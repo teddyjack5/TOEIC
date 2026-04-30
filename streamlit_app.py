@@ -429,7 +429,7 @@ def get_due_words(user_id):
 # ==============================================================================
 st.sidebar.title("設定")
 user_id = st.sidebar.text_input("User ID")
-mode = st.sidebar.radio("模式", ["📚 單字瀏覽","🎯測驗","🧠 記憶強化","🔁 需加強複習","🔁 今日複習", "📊學習進度分析",  "新增單字庫"])
+mode = st.sidebar.radio("模式", ["📚 單字瀏覽","🎯測驗","🧠 記憶強化","🔁 需加強複習","🔁 今日複習", "📊學習進度分析",  "🆕新增單字庫"])
 
 old_practice_mode = st.session_state.get("last_practice_mode")
 practice_mode = st.sidebar.selectbox("練習模式", ["單字", "填空", "多題填空","錯題"])
@@ -700,7 +700,7 @@ elif mode == "📊學習進度分析":
 # ==============================================================================
 # --- 主流程：新增單字庫 ---
 # ==============================================================================
-elif mode == "新增單字庫":
+elif mode == "🆕新增單字庫":
     st.subheader("新增單字")
     url = st.secrets["connections"]["gsheets"].get("script_url")
     with st.form("add"):
