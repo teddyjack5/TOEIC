@@ -911,7 +911,7 @@ elif mode == "📚 單字瀏覽":
         </div>
         """, unsafe_allow_html=True)
 
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns(3)
         with col1:
             if st.button("➡️ 下一張"):
                 st.session_state.flash_index += 1
@@ -923,6 +923,8 @@ elif mode == "📚 單字瀏覽":
                     st.session_state.flash_index -= 1
                     st.session_state.show_answer = False
                     st.rerun()
+        with col3:
+            create_audio_button(row.get("word",""), "🔊 單字", theme_mode)
 
     st.progress((i + 1) / len(df))
     st.caption(f"{i+1} / {len(df)}")
