@@ -911,7 +911,7 @@ elif mode == "📚 單字瀏覽":
         </div>
         """, unsafe_allow_html=True)
 
-        col1, col2 = st.columns(3)
+        col1, col2 ,col3 = st.columns(3)
         with col1:
             if st.button("➡️ 下一張"):
                 st.session_state.flash_index += 1
